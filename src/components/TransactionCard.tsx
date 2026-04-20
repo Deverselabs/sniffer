@@ -21,15 +21,15 @@ export function TransactionCard({
   whaleScore,
 }: TransactionCardProps) {
   return (
-    <article className="rounded-xl border border-gray-200 bg-white p-4">
+    <article className="rounded-lg border border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)] p-4 transition hover:border-[rgba(127,119,221,0.2)]">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-2">
-          <p className="text-sm text-gray-500">
+          <p className="font-mono text-sm text-[rgba(127,119,221,0.6)]">
             From:{" "}
             <button
               type="button"
               onClick={() => onAddressClick(tx.from)}
-              className="font-mono text-indigo-600 transition hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+              className="font-mono text-[#AFA9EC] transition hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
             >
               {shortAddr(tx.from)}
             </button>
@@ -41,13 +41,13 @@ export function TransactionCard({
               </span>
             )}
           </p>
-          <p className="text-sm text-gray-500">
+          <p className="font-mono text-sm text-[rgba(255,255,255,0.2)]">
             Tx:{" "}
             <a
               href={`https://etherscan.io/tx/${tx.hash}`}
               target="_blank"
               rel="noreferrer"
-              className="font-mono text-blue-600 hover:underline"
+              className="font-mono text-[rgba(255,255,255,0.2)] hover:text-[rgba(175,169,236,0.9)] hover:underline"
             >
               {shortAddr(tx.hash)}
             </a>
@@ -55,10 +55,10 @@ export function TransactionCard({
         </div>
 
         <div className="text-right">
-          <p className="text-base font-semibold text-emerald-600">
+          <p className="font-mono text-base font-semibold text-[#5DCAA5]">
             +{formatEth(tx.valueEth)}
           </p>
-          <p className="mt-1 text-sm text-gray-500">{timeAgo(tx.timestamp)}</p>
+          <p className="mt-1 font-mono text-sm text-[rgba(255,255,255,0.15)]">{timeAgo(tx.timestamp)}</p>
         </div>
       </div>
     </article>

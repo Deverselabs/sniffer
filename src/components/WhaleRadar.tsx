@@ -11,11 +11,11 @@ interface WhaleRadarProps {
 }
 
 function tierClass(color: "green" | "purple" | "blue" | "amber" | "red") {
-  if (color === "green") return "bg-emerald-100 text-emerald-700";
-  if (color === "purple") return "bg-purple-100 text-purple-700";
-  if (color === "blue") return "bg-blue-100 text-blue-700";
-  if (color === "amber") return "bg-amber-100 text-amber-700";
-  return "bg-red-100 text-red-700";
+  if (color === "green") return "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30";
+  if (color === "purple") return "bg-purple-500/15 text-purple-300 border border-purple-500/30";
+  if (color === "blue") return "bg-blue-500/15 text-blue-300 border border-blue-500/30";
+  if (color === "amber") return "bg-amber-500/15 text-amber-300 border border-amber-500/30";
+  return "bg-red-500/15 text-red-300 border border-red-500/30";
 }
 
 function progressColor(score: number) {
@@ -50,13 +50,13 @@ export function WhaleRadar({ data, profile }: WhaleRadarProps) {
   ];
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
+    <section className="rounded-lg border border-[rgba(127,119,221,0.2)] bg-[rgba(127,119,221,0.06)] p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-gray-500">
+          <p className="font-mono text-xs font-medium uppercase tracking-[0.08em] text-[rgba(255,255,255,0.35)]">
             {selectedProfile.emoji} {selectedProfile.label} - Whale Radar Score
           </p>
-          <p className="text-4xl font-bold tracking-tight text-gray-900">{score.total}</p>
+          <p className="font-mono text-4xl font-bold tracking-tight text-white">{score.total}</p>
         </div>
         <span
           className={`inline-flex w-fit rounded-full px-3 py-1 text-sm font-medium ${tierClass(score.tierColor)}`}
@@ -65,16 +65,16 @@ export function WhaleRadar({ data, profile }: WhaleRadarProps) {
         </span>
       </div>
 
-      <div className="mt-4 h-2.5 w-full rounded-full bg-gray-100">
+      <div className="mt-4 h-2.5 w-full rounded-full bg-[rgba(255,255,255,0.06)]">
         <div
           className={`h-2.5 rounded-full transition-all ${progressColor(score.total)}`}
           style={{ width: `${score.total}%` }}
         />
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-gray-100">
+      <div className="mt-4 overflow-hidden rounded-lg border border-[rgba(127,119,221,0.18)]">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-gray-600">
+          <thead className="bg-[rgba(255,255,255,0.03)] text-[rgba(255,255,255,0.45)]">
             <tr>
               <th className="px-3 py-2 text-left font-medium">Tier</th>
               <th className="px-3 py-2 text-right font-medium">Points</th>
@@ -82,9 +82,9 @@ export function WhaleRadar({ data, profile }: WhaleRadarProps) {
           </thead>
           <tbody>
             {breakdown.map((row) => (
-              <tr key={row.name} className="border-t border-gray-100">
-                <td className="px-3 py-2 text-gray-700">{row.name}</td>
-                <td className="px-3 py-2 text-right font-medium text-gray-900">
+              <tr key={row.name} className="border-t border-[rgba(127,119,221,0.12)]">
+                <td className="px-3 py-2 text-[rgba(255,255,255,0.7)]">{row.name}</td>
+                <td className="px-3 py-2 text-right font-medium text-white">
                   {row.points}/{row.max}
                 </td>
               </tr>
