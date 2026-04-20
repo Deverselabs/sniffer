@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: sniffer
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    pullRequestPreviewsEnabled: false
+    envVars:
+      - key: VITE_ETHERSCAN_API_KEY
+        sync: false
