@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sniffer | Whale Detection for Crypto Deposits</title>
+    <style>
+      :root {
+        --text: #111827;
+        --muted: #6b7280;
+        --border: #e5e7eb;
+        --bg: #ffffff;
+        --primary: #7f77dd;
+        --success: #1d9e75;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, sans-serif;
+        color: var(--text);
+        background: var(--bg);
+        line-height: 1.5;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .container {
+        width: min(1100px, 92%);
+        margin: 0 auto;
+      }
+
+      .section {
+        padding: 80px 0;
+      }
+
+      .navbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: #fff;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .nav-inner {
+        height: 68px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .logo {
+        font-size: 1.15rem;
+        font-weight: 700;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 11px 16px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        background: #fff;
+        color: var(--text);
+      }
+
+      .btn-primary {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
+      }
+
+      .btn-secondary {
+        background: #fff;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0 0 16px;
+        line-height: 1.2;
+      }
+
+      h1 {
+        font-size: clamp(2.2rem, 5vw, 3.6rem);
+        font-weight: 800;
+        max-width: 760px;
+      }
+
+      h2 {
+        font-size: clamp(1.7rem, 3vw, 2.3rem);
+        font-weight: 750;
+      }
+
+      .lead {
+        color: var(--muted);
+        font-size: clamp(1.02rem, 2vw, 1.2rem);
+        max-width: 760px;
+        margin-bottom: 26px;
+      }
+
+      .hero-ctas {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .social-proof {
+        margin-top: 16px;
+        color: var(--muted);
+        font-size: 0.93rem;
+      }
+
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .card {
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 22px;
+        background: #fff;
+      }
+
+      .problem-card {
+        font-size: 1.02rem;
+      }
+
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .step-number {
+        display: inline-flex;
+        width: 30px;
+        height: 30px;
+        border-radius: 999px;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        margin-bottom: 12px;
+        background: #f3f4f6;
+      }
+
+      .muted {
+        color: var(--muted);
+        margin: 0;
+      }
+
+      .tier-range {
+        font-size: 0.87rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+        display: inline-block;
+      }
+
+      .tier-green {
+        color: var(--success);
+      }
+
+      .tier-purple {
+        color: var(--primary);
+      }
+
+      .tier-blue {
+        color: #2563eb;
+      }
+
+      .tier-amber {
+        color: #b45309;
+      }
+
+      .tier-gray {
+        color: #4b5563;
+      }
+
+      .price {
+        font-size: 2rem;
+        font-weight: 800;
+        margin: 6px 0 14px;
+      }
+
+      .plan-list {
+        margin: 0 0 18px;
+        padding-left: 18px;
+        color: var(--muted);
+      }
+
+      .badge {
+        display: inline-block;
+        margin-bottom: 8px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #fff;
+        background: var(--primary);
+        border-radius: 999px;
+        padding: 4px 10px;
+      }
+
+      .email-wrap {
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 26px;
+        max-width: 760px;
+      }
+
+      .email-form {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+      }
+
+      .email-input {
+        flex: 1 1 300px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 14px;
+        font-size: 0.96rem;
+      }
+
+      .footer {
+        border-top: 1px solid var(--border);
+        padding: 34px 0 44px;
+      }
+
+      .footer p {
+        margin: 6px 0;
+        color: var(--muted);
+      }
+
+      .footer .brand {
+        color: var(--text);
+        font-weight: 700;
+      }
+
+      @media (max-width: 900px) {
+        .grid-3,
+        .steps {
+          grid-template-columns: 1fr;
+        }
+
+        .section {
+          padding: 64px 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="navbar">
+      <div class="container nav-inner">
+        <div class="logo">🐋 Sniffer</div>
+        <a class="btn btn-primary" href="mailto:admin@deverselabs.io">Request Access</a>
+      </div>
+    </nav>
+
+    <main>
+      <section class="section">
+        <div class="container">
+          <h1>Know if your depositor is a whale before they leave.</h1>
+          <p class="lead">
+            Sniffer scores every crypto deposit 0–100 in seconds. Spot your VIPs instantly. Never
+            miss a whale again.
+          </p>
+          <div class="hero-ctas">
+            <a class="btn btn-primary" href="mailto:admin@deverselabs.io">Request Early Access</a>
+            <a class="btn btn-secondary" href="#how-it-works">See how it works ↓</a>
+          </div>
+          <p class="social-proof">
+            Built for crypto casinos, exchanges, and DeFi platforms
+          </p>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <h2>The problem with crypto deposits</h2>
+          <div class="grid-3">
+            <article class="card problem-card">
+              You can't tell a whale from a casual player at deposit time
+            </article>
+            <article class="card problem-card">
+              By the time you identify a VIP, your competitor already has them
+            </article>
+            <article class="card problem-card">
+              Manual wallet research takes hours. You need seconds.
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="how-it-works">
+        <div class="container">
+          <h2>How Sniffer works</h2>
+          <div class="steps">
+            <article class="card">
+              <div class="step-number">1</div>
+              <h3>Step 1 — A deposit hits your platform</h3>
+              <p class="muted">
+                Sniffer receives the wallet address automatically via webhook or CSV upload.
+              </p>
+            </article>
+            <article class="card">
+              <div class="step-number">2</div>
+              <h3>Step 2 — We scan the entire on-chain history</h3>
+              <p class="muted">
+                Balance, transaction volume, wallet age, gambling interactions, upstream sender
+                wealth — all checked in seconds.
+              </p>
+            </article>
+            <article class="card">
+              <div class="step-number">3</div>
+              <h3>Step 3 — You get a Whale Radar score</h3>
+              <p class="muted">
+                0–100 score with tier label. 70+ means call your VIP team now.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <h2>The Whale Radar Score</h2>
+          <div class="grid-3">
+            <article class="card">
+              <span class="tier-range tier-green">90–100: Instant VIP</span>
+              <p class="muted">Deploy VIP host immediately</p>
+            </article>
+            <article class="card">
+              <span class="tier-range tier-purple">70–89: VIP</span>
+              <p class="muted">Priority outreach within the hour</p>
+            </article>
+            <article class="card">
+              <span class="tier-range tier-blue">50–69: Warm Lead</span>
+              <p class="muted">Add to VIP nurture sequence</p>
+            </article>
+            <article class="card">
+              <span class="tier-range tier-amber">30–49: Monitor</span>
+              <p class="muted">Watch for next deposit</p>
+            </article>
+            <article class="card">
+              <span class="tier-range tier-gray">0–29: Standard</span>
+              <p class="muted">Standard player flow</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <h2>Simple pricing</h2>
+          <div class="grid-3">
+            <article class="card">
+              <h3>Starter</h3>
+              <div class="price">$199/mo</div>
+              <ul class="plan-list">
+                <li>500 wallet scans/month</li>
+                <li>CSV upload &amp; export</li>
+                <li>Email support</li>
+              </ul>
+              <a class="btn btn-secondary" href="mailto:admin@deverselabs.io">Get started</a>
+            </article>
+            <article class="card">
+              <span class="badge">Most popular</span>
+              <h3>Growth</h3>
+              <div class="price">$499/mo</div>
+              <ul class="plan-list">
+                <li>5,000 scans/month</li>
+                <li>Real-time webhook alerts</li>
+                <li>API access</li>
+                <li>Priority support</li>
+              </ul>
+              <a class="btn btn-primary" href="mailto:admin@deverselabs.io">Get started</a>
+            </article>
+            <article class="card">
+              <h3>Casino Pro</h3>
+              <div class="price">$1,499/mo</div>
+              <ul class="plan-list">
+                <li>Unlimited scans</li>
+                <li>Custom scoring weights</li>
+                <li>Dedicated Slack channel</li>
+                <li>White-label option</li>
+              </ul>
+              <a class="btn btn-secondary" href="mailto:admin@deverselabs.io">Contact us</a>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="email-wrap">
+            <h2>Get early access</h2>
+            <p class="muted">
+              We're onboarding a small number of pilot customers. No payment required to start.
+            </p>
+            <form id="early-access-form" class="email-form">
+              <input
+                class="email-input"
+                type="email"
+                id="email"
+                name="email"
+                placeholder="you@company.com"
+                required
+              />
+              <button class="btn btn-primary" type="submit">Request Access</button>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <p class="brand">🐋 Sniffer by Deverselabs</p>
+        <p>© 2026 Deverselabs. Built for the crypto industry.</p>
+        <p><a href="mailto:admin@deverselabs.io">admin@deverselabs.io</a></p>
+      </div>
+    </footer>
+
+    <script>
+      (function () {
+        var form = document.getElementById("early-access-form");
+        var emailInput = document.getElementById("email");
+        if (!form || !emailInput) return;
+
+        form.addEventListener("submit", function (event) {
+          event.preventDefault();
+          var email = emailInput.value.trim();
+          if (!email) return;
+          var subject = encodeURIComponent("Sniffer Early Access");
+          var body = encodeURIComponent("My email is: " + email);
+          window.location.href = "mailto:admin@deverselabs.io?subject=" + subject + "&body=" + body;
+        });
+      })();
+    </script>
+  </body>
+</html>
