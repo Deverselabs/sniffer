@@ -29,25 +29,17 @@ function progressColor(score: number) {
 export function WhaleRadar({ data, profile }: WhaleRadarProps) {
   const score = computeWhaleScore(data, profile);
   const selectedProfile = INDUSTRY_PROFILES[profile];
-  const totalUsdReceived = score.totalEthReceived * (data.ethPriceUsd ?? 0);
-
-  const breakdown = [
-    {
-      name: `Wallet Wealth - Total received: ${score.totalEthReceived.toFixed(4)} ETH ($${totalUsdReceived.toLocaleString(
-        undefined,
-        { maximumFractionDigits: 2 }
-      )})`,
-      points: score.wealth,
-      max: selectedProfile.weights.wealth,
-    },
-    {
-      name: `Gambling & Risk - Gambling interactions: ${score.gamblingTxCount} txns from known contracts`,
-      points: score.gambling,
-      max: selectedProfile.weights.gambling,
-    },
-    { name: "Wallet Age & Profile", points: score.age, max: selectedProfile.weights.age },
-    { name: "Volume Signal", points: score.volume, max: selectedProfile.weights.volume },
-  ];
+  const breakdown = score.tiers.map((tier) => ({
+    ...tier,
+    label:
+      tier.id === "t2"
+        ? `${tier.label} (interactions: ${score.gamblingTxCount})`
+        : tier.id === "t3"
+          ? `${tier.label} (${score.totalEthReceived.toFixed(3)} ETH received)`
+          : tier.id === "t4"
+            ? `${tier.label} (${Math.floor(score.walletAgeDays)} days)`
+            : tier.label,
+  }));
 
   return (
     <section className="rounded-lg border border-[rgba(127,119,221,0.2)] bg-[rgba(127,119,221,0.06)] p-4 sm:p-5">
@@ -82,8 +74,18 @@ export function WhaleRadar({ data, profile }: WhaleRadarProps) {
           </thead>
           <tbody>
             {breakdown.map((row) => (
-              <tr key={row.name} className="border-t border-[rgba(127,119,221,0.12)]">
-                <td className="px-3 py-2 text-[rgba(255,255,255,0.7)]">{row.name}</td>
+              <tr key={row.id} className="border-t border-[rgba(127,119,221,0.12)]">
+                <td className="px-3 py-2 text-[rgba(255,255,255,0.7)]">
+                  <div className="flex flex-col gap-1">
+                    <span>{row.label}</span>
+                    <div className="h-1.5 w-full rounded-full bg-[rgba(255,255,255,0.08)]">
+                      <div
+                        className="h-1.5 rounded-full bg-indigo-400"
+                        style={{ width: `${Math.min(100, (row.points / row.max) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                </td>
                 <td className="px-3 py-2 text-right font-medium text-white">
                   {row.points}/{row.max}
                 </td>

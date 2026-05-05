@@ -2,9 +2,22 @@ services:
   - type: web
     name: sniffer
     runtime: static
-    buildCommand: npm install && npm run build
+    buildCommand: npm install && VITE_ETHERSCAN_API_KEY=$ETHERSCAN_API_KEY npm run build
     staticPublishPath: ./dist
     pullRequestPreviewsEnabled: false
     envVars:
-      - key: VITE_ETHERSCAN_API_KEY
+      - key: ETHERSCAN_API_KEY
         sync: false
+      - key: MORALIS_API_KEY
+        sync: false
+      - key: ARKHAM_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sniffer-postgres
+          property: connectionString
+databases:
+  - name: sniffer-postgres
+    databaseName: sniffer
+    user: sniffer_user
+    plan: free
