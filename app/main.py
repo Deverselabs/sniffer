@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -7,6 +8,17 @@ from app.api.v1 import router as v1_router
 from app.services.jobs import arkham_sync, etherscan_label_scrape, self_learning_sweep, verify_active_contracts
 
 app = FastAPI(title="Sniffer API", version="1.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://sniffer-kzmi.onrender.com",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(v1_router)
 app.include_router(admin_router)
 
