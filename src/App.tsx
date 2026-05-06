@@ -1,11 +1,12 @@
 import { useState } from "react";
-import type { WalletData } from "./api";
+import type { Chain, WalletData } from "./api";
 import { BulkUpload } from "./components/BulkUpload";
 import DogLogo from "./components/DogLogo";
 import { MetricsBar } from "./components/MetricsBar";
 import { TransactionList } from "./components/TransactionList";
 import { WhaleRadar } from "./components/WhaleRadar";
 import { useWalletData } from "./hooks/useWalletData";
+import { detectChain, isValidAddressForChain } from "./utils/address";
 import { INDUSTRY_PROFILES, type IndustryProfile } from "./utils/whaleScore";
 
 type View =
@@ -16,22 +17,27 @@ function App() {
   const [view, setView] = useState<View>({ level: "root" });
   const [mode, setMode] = useState<"single" | "bulk">("single");
   const [profile, setProfile] = useState<IndustryProfile>("casino");
-  const [chain, setChain] = useState<"ethereum" | "solana" | "tron">("ethereum");
+  const [chain, setChain] = useState<Chain>("ethereum");
   const [address, setAddress] = useState("");
   const rootWallet = useWalletData();
   const senderWallet = useWalletData();
 
   const CHAINS = [
     { id: "ethereum", label: "ETH", color: "#627EEA", soon: false },
-    { id: "solana", label: "SOL", color: "#9945FF", soon: true },
-    { id: "tron", label: "TRX", color: "#FF0013", soon: true },
+    { id: "solana", label: "SOL", color: "#9945FF", soon: false },
+    { id: "tron", label: "TRX", color: "#FF0013", soon: false },
   ] as const;
 
-  const ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
-
-  async function handleRootSubmit(address: string) {
+  function changeChain(next: Chain) {
+    setChain(next);
     setView({ level: "root" });
-    await rootWallet.fetchWallet(address);
+    rootWallet.clear();
+    senderWallet.clear();
+  }
+
+  async function handleRootSubmit(address: string, selectedChain: Chain) {
+    setView({ level: "root" });
+    await rootWallet.fetchWallet(address, selectedChain);
   }
 
   async function handleAddressClick(address: string, sourceWallet: WalletData) {
@@ -40,7 +46,7 @@ function App() {
       address,
       parentAddress: sourceWallet.address,
     });
-    await senderWallet.fetchWallet(address);
+    await senderWallet.fetchWallet(address, sourceWallet.chain);
   }
 
   const activeData = view.level === "root" ? rootWallet.data : senderWallet.data;
@@ -53,8 +59,13 @@ function App() {
 
   function handleTrack() {
     const trimmed = address.trim();
-    if (!ADDRESS_REGEX.test(trimmed)) return;
-    void handleRootSubmit(trimmed);
+    const detected = detectChain(trimmed);
+    if (detected && detected !== chain) {
+      setChain(detected);
+    }
+    const activeChain = detected ?? chain;
+    if (!isValidAddressForChain(trimmed, activeChain)) return;
+    void handleRootSubmit(trimmed, activeChain);
   }
 
   return (
@@ -251,7 +262,7 @@ function App() {
             {CHAINS.map((c) => (
               <button
                 key={c.id}
-                onClick={() => !c.soon && setChain(c.id)}
+                onClick={() => !c.soon && changeChain(c.id)}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -268,7 +279,7 @@ function App() {
                   fontSize: 11,
                   cursor: c.soon ? "default" : "pointer",
                   fontFamily: "'Courier New', monospace",
-                  opacity: c.soon ? 0.4 : 1,
+                  opacity: 1,
                   boxShadow: chain === c.id ? "0 0 16px rgba(127,119,221,0.1)" : "none",
                   transition: "all 0.15s",
                 }}
@@ -360,7 +371,7 @@ function App() {
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleTrack()}
-              disabled={activeLoading || chain !== "ethereum"}
+              disabled={activeLoading}
               placeholder="// paste wallet address..."
               style={{
                 flex: 1,
@@ -375,7 +386,7 @@ function App() {
             />
             <button
               onClick={handleTrack}
-              disabled={activeLoading || chain !== "ethereum"}
+              disabled={activeLoading}
               style={{
                 background: "#7F77DD",
                 border: "none",
@@ -386,7 +397,7 @@ function App() {
                 fontSize: 13,
                 cursor: "pointer",
                 letterSpacing: "0.05em",
-                opacity: activeLoading || chain !== "ethereum" ? 0.5 : 1,
+                opacity: activeLoading ? 0.5 : 1,
               }}
             >
               {activeLoading ? "SNIFFING..." : "SNIFF →"}
@@ -491,11 +502,12 @@ function App() {
 
             {mode === "bulk" ? (
               <BulkUpload
+                chain={chain}
                 profile={profile}
                 onAddressSelect={(addr) => {
                   setMode("single");
                   setAddress(addr);
-                  void handleRootSubmit(addr);
+                  void handleRootSubmit(addr, chain);
                 }}
               />
             ) : (
@@ -504,6 +516,7 @@ function App() {
                 {activeData && <MetricsBar data={activeData} />}
                 {activeData && (
                   <TransactionList
+                    chain={activeData.chain}
                     transactions={activeData.incomingTx}
                     onAddressClick={(addr) => handleAddressClick(addr, activeData)}
                   />

@@ -1,3 +1,5 @@
+export type Chain = "ethereum" | "tron" | "solana";
+
 export interface Transaction {
   hash: string;
   from: string;
@@ -8,6 +10,7 @@ export interface Transaction {
 }
 
 export interface WalletData {
+  chain: Chain;
   address: string;
   balanceEth: number;
   balanceUsd: number | null;

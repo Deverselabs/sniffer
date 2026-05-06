@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { fetchWalletData } from "../api";
-import { ETHERSCAN_API_KEY } from "../api/config";
-import type { WalletData } from "../api";
+import type { Chain, WalletData } from "../api";
 
 interface State {
   data: WalletData | null;
@@ -16,10 +15,10 @@ export function useWalletData() {
     error: null,
   });
 
-  async function fetchWallet(address: string) {
+  async function fetchWallet(address: string, chain: Chain) {
     setState({ data: null, loading: true, error: null });
     try {
-      const data = await fetchWalletData(address, ETHERSCAN_API_KEY);
+      const data = await fetchWalletData(address, chain);
       setState({ data, loading: false, error: null });
     } catch (e: unknown) {
       const message =
@@ -28,5 +27,9 @@ export function useWalletData() {
     }
   }
 
-  return { ...state, fetchWallet };
+  function clear() {
+    setState({ data: null, loading: false, error: null });
+  }
+
+  return { ...state, fetchWallet, clear };
 }

@@ -47,6 +47,7 @@ This repo now includes a Python scoring engine and Postgres schema used for 10-t
 - Python scorer: `app/services/scorer.py`
 - Tier config: `app/services/config.py`
 - Migration: `migrations/001_init.sql`
+- Migration: `migrations/002_multichain.sql`
 - Seed source: `data/gambling.json`
 - Seed script: `scripts/seed_gambling_contracts.py`
 
@@ -55,12 +56,14 @@ This repo now includes a Python scoring engine and Postgres schema used for 10-t
 ```bash
 python -m pip install -r requirements.txt
 python -m pytest
+uvicorn app.main:app --reload
 ```
 
 ### Setup local Postgres
 
 ```bash
 psql postgresql://postgres:postgres@localhost:5432/sniffer -f migrations/001_init.sql
+psql postgresql://postgres:postgres@localhost:5432/sniffer -f migrations/002_multichain.sql
 python scripts/seed_gambling_contracts.py
 ```
 
@@ -77,6 +80,13 @@ Expected seed result: 13 records imported (7 verified, 6 candidate).
 
 Required env vars in Render service:
 - `ETHERSCAN_API_KEY` (required)
+- `TRONGRID_API_KEY` (required for TRX scans)
+- `SOLANA_RPC_URL` (optional override, default mainnet-beta)
 - `MORALIS_API_KEY` (required only if backend/API usage is enabled)
 - `ARKHAM_API_KEY` (optional)
 - `DATABASE_URL` (auto-injected from `sniffer-postgres` in blueprint)
+
+## API endpoints
+
+- `POST /api/v1/scan` with `{ "address": "...", "chain": "ethereum|tron|solana" }`
+- `POST /api/v1/batch` with CSV upload containing `address,chain` columns (up to 500 rows)

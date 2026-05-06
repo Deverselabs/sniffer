@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import json
+import os
+from urllib.error import URLError
+from urllib.parse import urlencode
+from urllib.request import urlopen
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional
@@ -13,6 +18,10 @@ class TxRecord:
     to_address: str
     value_eth: float
     timestamp: int
+
+
+ETHERSCAN_BASE_URL = "https://api.etherscan.io/v2/api"
+ETHEREUM_CHAIN_ID = 1
 
 
 def _weighted_points(weight: int, ratio: float) -> int:
@@ -103,6 +112,62 @@ def gambling_score(
     }
 
 
+def _fetch_etherscan_json(params: Dict[str, Any]) -> Dict[str, Any]:
+    query = urlencode(params)
+    url = f"{ETHERSCAN_BASE_URL}?{query}"
+    with urlopen(url, timeout=20) as response:
+        payload = response.read().decode("utf-8")
+    return json.loads(payload)
+
+
+def _fetch_wallet_snapshot_from_etherscan(address: str, api_key: str) -> Dict[str, Any]:
+    txlist_response = _fetch_etherscan_json(
+        {
+            "module": "account",
+            "action": "txlist",
+            "chainid": ETHEREUM_CHAIN_ID,
+            "address": address,
+            "startblock": 0,
+            "endblock": 99999999,
+            "sort": "desc",
+            "apikey": api_key,
+        }
+    )
+    balance_response = _fetch_etherscan_json(
+        {
+            "module": "account",
+            "action": "balance",
+            "chainid": ETHEREUM_CHAIN_ID,
+            "address": address,
+            "tag": "latest",
+            "apikey": api_key,
+        }
+    )
+    price_response = _fetch_etherscan_json(
+        {
+            "module": "stats",
+            "action": "ethprice",
+            "chainid": ETHEREUM_CHAIN_ID,
+            "apikey": api_key,
+        }
+    )
+
+    txs = txlist_response.get("result", [])
+    if not isinstance(txs, list):
+        txs = []
+
+    raw_balance = balance_response.get("result", "0")
+    balance_eth = float(raw_balance) / 1e18 if str(raw_balance).isdigit() else 0.0
+
+    raw_eth_usd = price_response.get("result", {}).get("ethusd", "0")
+    try:
+        eth_price_usd = float(raw_eth_usd)
+    except (TypeError, ValueError):
+        eth_price_usd = 0.0
+
+    return {"txs": txs, "balance_eth": balance_eth, "eth_price_usd": eth_price_usd}
+
+
 def score(
     address: str,
     *,
@@ -111,11 +176,27 @@ def score(
     balance_eth: float = 0.0,
     eth_price_usd: float = 0.0,
 ) -> Dict[str, Any]:
+    normalized_address = address.lower()
+    if txlist is None:
+        api_key = os.getenv("ETHERSCAN_API_KEY", "").strip()
+        if not api_key:
+            raise ValueError("Missing ETHERSCAN_API_KEY for live scoring.")
+        try:
+            live_snapshot = _fetch_wallet_snapshot_from_etherscan(normalized_address, api_key)
+        except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"Failed to fetch wallet data from Etherscan: {exc}") from exc
+        txs = list(live_snapshot["txs"])
+        if balance_eth == 0.0:
+            balance_eth = float(live_snapshot["balance_eth"])
+        if eth_price_usd == 0.0:
+            eth_price_usd = float(live_snapshot["eth_price_usd"])
+    else:
+        txs = list(txlist)
+
     weights = tier_weights()
-    txs = list(txlist or [])
     contracts = list(gambling_contracts or [])
 
-    total_received_eth = sum(float(tx.get("value", "0")) / 1e18 for tx in txs if str(tx.get("to", "")).lower() == address.lower())
+    total_received_eth = sum(float(tx.get("value", "0")) / 1e18 for tx in txs if str(tx.get("to", "")).lower() == normalized_address)
     total_received_usd = total_received_eth * eth_price_usd
 
     t1_ratio = 1.0 if total_received_usd >= 250000 else 0.8 if total_received_usd >= 50000 else 0.5 if total_received_usd >= 10000 else 0.2 if total_received_usd >= 1000 else 0.0
@@ -128,7 +209,7 @@ def score(
     t4_ratio = 1.0 if age_days >= 730 else 0.75 if age_days >= 365 else 0.5 if age_days >= 180 else 0.25 if age_days >= 30 else 0.0
     t4_points = _weighted_points(weights["t4_wallet_age"], t4_ratio)
 
-    unique_senders = len({str(tx.get("from", "")).lower() for tx in txs if str(tx.get("to", "")).lower() == address.lower()})
+    unique_senders = len({str(tx.get("from", "")).lower() for tx in txs if str(tx.get("to", "")).lower() == normalized_address})
     t5_ratio = 1.0 if unique_senders >= 100 else 0.75 if unique_senders >= 40 else 0.5 if unique_senders >= 15 else 0.25 if unique_senders >= 5 else 0.0
     t5_points = _weighted_points(weights["t5_unique_senders"], t5_ratio)
 
@@ -172,7 +253,7 @@ def score(
 
     total = min(100, sum(tier["points"] for tier in tiers))
     return {
-        "address": address,
+        "address": normalized_address,
         "total": total,
         "tiers": tiers,
         "details": {

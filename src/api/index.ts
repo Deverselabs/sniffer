@@ -1,5 +1,41 @@
-export { fetchWalletData } from "./etherscan";
-export type { WalletData, Transaction } from "./types";
+import axios from "axios";
+import type { Chain, Transaction, WalletData } from "./types";
 
-// To add a new chain later:
-// export { fetchWalletData as fetchSolanaWalletData } from "./solana";
+interface ScanApiResponse {
+  address: string;
+  chain: Chain;
+  balance: number;
+  deposits: Array<{
+    hash: string;
+    from: string;
+    to: string;
+    value_native: number;
+    timestamp: number;
+  }>;
+}
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+
+export async function fetchWalletData(address: string, chain: Chain): Promise<WalletData> {
+  const res = await axios.post<ScanApiResponse>(`${API_BASE}/api/v1/scan`, { address, chain });
+  const incomingTx: Transaction[] = res.data.deposits.map((tx, idx) => ({
+    hash: tx.hash,
+    from: tx.from,
+    to: tx.to,
+    valueEth: tx.value_native,
+    timestamp: tx.timestamp,
+    blockNumber: idx,
+  }));
+  const uniqueSenders = new Set(incomingTx.map((tx) => tx.from.toLowerCase())).size;
+  return {
+    chain: res.data.chain,
+    address: res.data.address,
+    balanceEth: res.data.balance,
+    balanceUsd: null,
+    ethPriceUsd: null,
+    incomingTx,
+    uniqueSenders,
+  };
+}
+
+export type { Chain, WalletData, Transaction };

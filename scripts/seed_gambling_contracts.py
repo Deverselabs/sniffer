@@ -19,7 +19,7 @@ def main() -> None:
                 cur.execute(
                     """
                     INSERT INTO gambling_contracts (address, name, status, confidence, source, chain)
-                    VALUES (%s, %s, %s, %s, %s, 'ethereum')
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     ON CONFLICT (address) DO UPDATE SET
                         name = EXCLUDED.name,
                         status = EXCLUDED.status,
@@ -33,6 +33,7 @@ def main() -> None:
                         record["status"],
                         record["confidence"],
                         record["source"],
+                        record.get("chain", "ethereum"),
                     ),
                 )
         conn.commit()

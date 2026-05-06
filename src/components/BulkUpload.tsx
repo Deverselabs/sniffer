@@ -1,8 +1,9 @@
 import { useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { fetchWalletData } from "../api";
-import { ETHERSCAN_API_KEY } from "../api/config";
+import type { Chain } from "../api";
 import { downloadCsv } from "../utils/exportCsv";
+import { explorerBase, isValidAddressForChain } from "../utils/address";
 import { shortAddr } from "../utils/format";
 import {
   computeWhaleScore,
@@ -10,7 +11,6 @@ import {
   type IndustryProfile,
 } from "../utils/whaleScore";
 
-const ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
 const MAX_ADDRESSES = 100;
 
 type SortKey =
@@ -27,6 +27,7 @@ type SortKey =
 interface BulkUploadProps {
   onAddressSelect: (address: string) => void;
   profile: IndustryProfile;
+  chain: Chain;
 }
 
 interface ScannedRow {
@@ -62,7 +63,7 @@ function sleep(ms: number) {
   });
 }
 
-export function BulkUpload({ onAddressSelect, profile }: BulkUploadProps) {
+export function BulkUpload({ onAddressSelect, profile, chain }: BulkUploadProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [fileName, setFileName] = useState<string>("");
   const [addresses, setAddresses] = useState<string[]>([]);
@@ -96,7 +97,7 @@ export function BulkUpload({ onAddressSelect, profile }: BulkUploadProps) {
 
     for (const line of lines) {
       const candidate = parseFirstColumn(line);
-      if (ADDRESS_REGEX.test(candidate)) {
+      if (isValidAddressForChain(candidate, chain)) {
         validAddresses.push(candidate);
       } else {
         skipped += 1;
@@ -109,7 +110,7 @@ export function BulkUpload({ onAddressSelect, profile }: BulkUploadProps) {
     setAddresses(limited);
     setSkippedRows(skipped);
     setRows([]);
-    setParseError(limited.length === 0 ? "No valid Ethereum addresses found." : null);
+    setParseError(limited.length === 0 ? `No valid ${chain} addresses found.` : null);
   }
 
   function readCsvFile(file: File) {
@@ -156,7 +157,7 @@ export function BulkUpload({ onAddressSelect, profile }: BulkUploadProps) {
       setProgress({ current: i + 1, total: addresses.length });
 
       try {
-        const data = await fetchWalletData(address, ETHERSCAN_API_KEY);
+        const data = await fetchWalletData(address, chain);
         const score = computeWhaleScore(data, profile);
         results.push({
           address,
@@ -268,7 +269,7 @@ export function BulkUpload({ onAddressSelect, profile }: BulkUploadProps) {
         "unique_senders",
         "wallet_age_days",
         "gambling_interactions",
-        "etherscan_link",
+        "explorer_link",
       ],
       ...exportRows.map((row) => [
         row.address,
@@ -280,7 +281,7 @@ export function BulkUpload({ onAddressSelect, profile }: BulkUploadProps) {
         row.error ? "" : String(row.uniqueSenders),
         row.error ? "" : String(Math.floor(row.walletAgeDays)),
         row.error ? "" : String(row.gamblingInteractions),
-        `https://etherscan.io/address/${row.address}`,
+        `${explorerBase(chain)}/address/${row.address}`,
       ]),
     ];
 

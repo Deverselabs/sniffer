@@ -1,8 +1,10 @@
-import type { Transaction } from "../api";
-import { formatEth, shortAddr, timeAgo } from "../utils/format";
+import type { Chain, Transaction } from "../api";
+import { shortAddr, timeAgo } from "../utils/format";
+import { explorerBase } from "../utils/address";
 
 interface TransactionCardProps {
   tx: Transaction;
+  chain: Chain;
   onAddressClick: (address: string) => void;
   whaleScore?: number;
 }
@@ -17,9 +19,14 @@ function scoreBadgeClasses(score: number) {
 
 export function TransactionCard({
   tx,
+  chain,
   onAddressClick,
   whaleScore,
 }: TransactionCardProps) {
+  const txLink = chain === "tron"
+    ? `${explorerBase(chain)}/transaction/${tx.hash}`
+    : `${explorerBase(chain)}/tx/${tx.hash}`;
+  const token = chain === "tron" ? "TRX" : chain === "solana" ? "SOL" : "ETH";
   return (
     <article className="rounded-lg border border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)] p-4 transition hover:border-[rgba(127,119,221,0.2)]">
       <div className="flex items-start justify-between gap-4">
@@ -44,7 +51,7 @@ export function TransactionCard({
           <p className="font-mono text-sm text-[rgba(255,255,255,0.2)]">
             Tx:{" "}
             <a
-              href={`https://etherscan.io/tx/${tx.hash}`}
+              href={txLink}
               target="_blank"
               rel="noreferrer"
               className="font-mono text-[rgba(255,255,255,0.2)] hover:text-[rgba(175,169,236,0.9)] hover:underline"
@@ -56,7 +63,7 @@ export function TransactionCard({
 
         <div className="text-right">
           <p className="font-mono text-base font-semibold text-[#5DCAA5]">
-            +{formatEth(tx.valueEth)}
+            +{tx.valueEth.toFixed(4)} {token}
           </p>
           <p className="mt-1 font-mono text-sm text-[rgba(255,255,255,0.15)]">{timeAgo(tx.timestamp)}</p>
         </div>

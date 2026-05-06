@@ -1,2 +1,6 @@
 psycopg[binary]
 pytest
+fastapi
+uvicorn
+httpx
+python-multipart

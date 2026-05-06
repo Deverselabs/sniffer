@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
-import type { Transaction } from "../api";
+import type { Chain, Transaction } from "../api";
 import { downloadCsv } from "../utils/exportCsv";
+import { explorerBase } from "../utils/address";
 import { TransactionCard } from "./TransactionCard";
 
 interface TransactionListProps {
+  chain: Chain;
   transactions: Transaction[];
   onAddressClick: (address: string) => void;
 }
@@ -21,6 +23,7 @@ function formatReadableUtc(unixTs: number): string {
 }
 
 export function TransactionList({
+  chain,
   transactions,
   onAddressClick,
 }: TransactionListProps) {
@@ -40,6 +43,7 @@ export function TransactionList({
   function handleExportDeposits() {
     if (transactions.length === 0) return;
 
+    const txPrefix = chain === "tron" ? "transaction" : "tx";
     const csvRows: string[][] = [
       [
         "tx_hash",
@@ -48,7 +52,7 @@ export function TransactionList({
         "eth_amount",
         "timestamp_unix",
         "date_readable",
-        "etherscan_link",
+        "explorer_link",
       ],
       ...transactions.map((tx) => [
         tx.hash,
@@ -57,7 +61,7 @@ export function TransactionList({
         tx.valueEth.toFixed(4),
         String(tx.timestamp),
         formatReadableUtc(tx.timestamp),
-        `https://etherscan.io/tx/${tx.hash}`,
+        `${explorerBase(chain)}/${txPrefix}/${tx.hash}`,
       ]),
     ];
 
@@ -105,6 +109,7 @@ export function TransactionList({
           <TransactionCard
             key={tx.hash}
             tx={tx}
+            chain={chain}
             onAddressClick={onAddressClick}
             whaleScore={undefined}
           />

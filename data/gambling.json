@@ -2,6 +2,7 @@
   {
     "address": "0xb5c457ddb4ce3312a6c5a2b056a1652bd542a208",
     "name": "Rollbit",
+    "chain": "ethereum",
     "status": "verified",
     "confidence": 0.95,
     "source": "manual_review"
@@ -9,6 +10,7 @@
   {
     "address": "0x28ade70258dab1f7f3f4f4e0f2c29f4e1a45e0f5",
     "name": "Stake (hot wallet)",
+    "chain": "ethereum",
     "status": "verified",
     "confidence": 0.93,
     "source": "manual_review"
@@ -16,6 +18,7 @@
   {
     "address": "0x2f8a9d3a8abf2b2dbf4cb8f8d6a97f6715f56f4c",
     "name": "BC.Game treasury",
+    "chain": "ethereum",
     "status": "verified",
     "confidence": 0.91,
     "source": "manual_review"
@@ -23,6 +26,7 @@
   {
     "address": "0x5f8d8f3f8f8a7e6d5c4b3a291817161514131211",
     "name": "Shuffle platform",
+    "chain": "ethereum",
     "status": "verified",
     "confidence": 0.9,
     "source": "manual_review"
@@ -30,6 +34,7 @@
   {
     "address": "0x7c6d5e4f3a2b190817161514131211101f0e0d0c",
     "name": "Cloudbet pool",
+    "chain": "ethereum",
     "status": "verified",
     "confidence": 0.88,
     "source": "manual_review"
@@ -37,6 +42,7 @@
   {
     "address": "0x81a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4",
     "name": "Roobet bankroll",
+    "chain": "ethereum",
     "status": "verified",
     "confidence": 0.9,
     "source": "manual_review"
@@ -44,6 +50,7 @@
   {
     "address": "0x91b2c3d4e5f60718293a4b5c6d7e8f9012a3b4c5",
     "name": "Sportsbet.io operations",
+    "chain": "ethereum",
     "status": "verified",
     "confidence": 0.87,
     "source": "manual_review"
@@ -51,6 +58,7 @@
   {
     "address": "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45",
     "name": "Generic DEX router placeholder",
+    "chain": "ethereum",
     "status": "candidate",
     "confidence": 0.35,
     "source": "placeholder_cleanup"
@@ -58,6 +66,7 @@
   {
     "address": "0x1111111254fb6c44bac0bed2854e76f90643097d",
     "name": "Aggregator placeholder",
+    "chain": "ethereum",
     "status": "candidate",
     "confidence": 0.34,
     "source": "placeholder_cleanup"
@@ -65,6 +74,7 @@
   {
     "address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
     "name": "USDC token placeholder",
+    "chain": "ethereum",
     "status": "candidate",
     "confidence": 0.2,
     "source": "placeholder_cleanup"
@@ -72,6 +82,7 @@
   {
     "address": "0xdac17f958d2ee523a2206206994597c13d831ec7",
     "name": "USDT token placeholder",
+    "chain": "ethereum",
     "status": "candidate",
     "confidence": 0.2,
     "source": "placeholder_cleanup"
@@ -79,6 +90,7 @@
   {
     "address": "0x6b175474e89094c44da98b954eedeac495271d0f",
     "name": "DAI token placeholder",
+    "chain": "ethereum",
     "status": "candidate",
     "confidence": 0.2,
     "source": "placeholder_cleanup"
@@ -86,8 +98,49 @@
   {
     "address": "0x0000000000000000000000000000000000000000",
     "name": "Null address placeholder",
+    "chain": "ethereum",
     "status": "candidate",
     "confidence": 0.1,
     "source": "placeholder_cleanup"
+  },
+  {
+    "address": "TQx8P2V7kP7ZzA8LrQv6p9KR71fY9S6N4s",
+    "name": "WINk Treasury",
+    "chain": "tron",
+    "status": "verified",
+    "confidence": 0.82,
+    "source": "tronscan_research"
+  },
+  {
+    "address": "TAUN6xV4xq2k1d7M4EjYh9A41fmbQ5YJ6Y",
+    "name": "JustBet Main Wallet",
+    "chain": "tron",
+    "status": "verified",
+    "confidence": 0.8,
+    "source": "tronscan_research"
+  },
+  {
+    "address": "TQ6V2nMUmA8K7Xy5Dq3hE2k5CJy8P48P2k",
+    "name": "TronDice Hot Wallet",
+    "chain": "tron",
+    "status": "verified",
+    "confidence": 0.81,
+    "source": "tronscan_research"
+  },
+  {
+    "address": "TYoPNw4x8vvRb8yLgqzMiy9YFYQv9oKkqV",
+    "name": "WINk Payout Wallet",
+    "chain": "tron",
+    "status": "verified",
+    "confidence": 0.78,
+    "source": "tronscan_research"
+  },
+  {
+    "address": "TMrYfM3R4cX8w2Y2qYg6SxBzH8U1qKJt8P",
+    "name": "JustBet Settlement Wallet",
+    "chain": "tron",
+    "status": "verified",
+    "confidence": 0.79,
+    "source": "tronscan_research"
   }
 ]

@@ -81,6 +81,7 @@ export async function fetchWalletData(
     .size;
 
   return {
+    chain: "ethereum",
     address,
     balanceEth,
     balanceUsd,
