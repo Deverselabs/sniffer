@@ -22,7 +22,11 @@ async def tron_balance(address: str, api_key: str | None = None) -> float:
     account_rows = payload.get("data", [])
     if not account_rows:
         return 0.0
-    balance_sun = int(account_rows[0].get("balance", 0))
+    raw_balance = account_rows[0].get("balance", 0)
+    try:
+        balance_sun = int(raw_balance or 0)
+    except (TypeError, ValueError) as exc:
+        raise TronServiceError(f"Unexpected Tron balance payload: {raw_balance}") from exc
     return balance_sun / 1_000_000
 
 
@@ -36,7 +40,10 @@ async def tron_deposits(address: str, api_key: str | None = None, limit: int = 2
     if response.status_code >= 400:
         raise TronServiceError(f"TronGrid deposits failed: {response.status_code} {response.text}")
 
-    tx_rows = response.json().get("data", [])
+    payload = response.json()
+    tx_rows = payload.get("data", [])
+    if not isinstance(tx_rows, list):
+        raise TronServiceError("Unexpected TronGrid transactions payload shape")
     results: List[Dict[str, Any]] = []
     for tx in tx_rows:
         raw_data = tx.get("raw_data", {})

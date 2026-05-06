@@ -45,31 +45,38 @@ async def scan_wallet(body: ScanRequest) -> Dict[str, Any]:
     if not validate_address(chain, address):
         raise HTTPException(status_code=400, detail=f"Invalid {chain} address format")
 
-    if chain == "ethereum":
-        api_key = os.getenv("ETHERSCAN_API_KEY", "").strip()
-        if not api_key:
-            raise HTTPException(status_code=500, detail="Missing ETHERSCAN_API_KEY")
-        snapshot = await eth_snapshot(address, api_key)
-        normalized = _normalize_for_score(address, snapshot["deposits"])
-        scoring = score(
-            address,
-            txlist=normalized,
-            balance_eth=snapshot["balance"],
-            eth_price_usd=snapshot["price_usd"],
-        )
-    elif chain == "tron":
-        tron_key = os.getenv("TRONGRID_API_KEY", "").strip() or None
-        balance = await tron_balance(address, tron_key)
-        deposits = await tron_deposits(address, tron_key)
-        normalized = _normalize_for_score(address, deposits)
-        scoring = score(address, txlist=normalized, balance_eth=balance, eth_price_usd=0)
-        snapshot = {"balance": balance, "deposits": deposits}
-    else:
-        balance = await sol_balance(address)
-        deposits = await sol_deposits(address)
-        normalized = _normalize_for_score(address, deposits)
-        scoring = score(address, txlist=normalized, balance_eth=balance, eth_price_usd=0)
-        snapshot = {"balance": balance, "deposits": deposits}
+    try:
+        if chain == "ethereum":
+            api_key = os.getenv("ETHERSCAN_API_KEY", "").strip()
+            if not api_key:
+                raise HTTPException(status_code=500, detail="Missing ETHERSCAN_API_KEY")
+            snapshot = await eth_snapshot(address, api_key)
+            normalized = _normalize_for_score(address, snapshot["deposits"])
+            scoring = score(
+                address,
+                txlist=normalized,
+                balance_eth=snapshot["balance"],
+                eth_price_usd=snapshot["price_usd"],
+            )
+        elif chain == "tron":
+            tron_key = os.getenv("TRONGRID_API_KEY", "").strip() or None
+            if not tron_key:
+                raise HTTPException(status_code=500, detail="Missing TRONGRID_API_KEY")
+            balance = await tron_balance(address, tron_key)
+            deposits = await tron_deposits(address, tron_key)
+            normalized = _normalize_for_score(address, deposits)
+            scoring = score(address, txlist=normalized, balance_eth=balance, eth_price_usd=0)
+            snapshot = {"balance": balance, "deposits": deposits}
+        else:
+            balance = await sol_balance(address)
+            deposits = await sol_deposits(address)
+            normalized = _normalize_for_score(address, deposits)
+            scoring = score(address, txlist=normalized, balance_eth=balance, eth_price_usd=0)
+            snapshot = {"balance": balance, "deposits": deposits}
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"{chain} scan failed: {exc}") from exc
 
     return {
         "address": address,
