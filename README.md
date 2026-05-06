@@ -48,6 +48,7 @@ This repo now includes a Python scoring engine and Postgres schema used for 10-t
 - Tier config: `app/services/config.py`
 - Migration: `migrations/001_init.sql`
 - Migration: `migrations/002_multichain.sql`
+- Migration: `migrations/003_admin_candidates.sql`
 - Seed source: `data/gambling.json`
 - Seed script: `scripts/seed_gambling_contracts.py`
 
@@ -64,6 +65,7 @@ uvicorn app.main:app --reload
 ```bash
 psql postgresql://postgres:postgres@localhost:5432/sniffer -f migrations/001_init.sql
 psql postgresql://postgres:postgres@localhost:5432/sniffer -f migrations/002_multichain.sql
+psql postgresql://postgres:postgres@localhost:5432/sniffer -f migrations/003_admin_candidates.sql
 python scripts/seed_gambling_contracts.py
 ```
 
@@ -90,3 +92,13 @@ Required env vars in Render service:
 
 - `POST /api/v1/scan` with `{ "address": "...", "chain": "ethereum|tron|solana" }`
 - `POST /api/v1/batch` with CSV upload containing `address,chain` columns (up to 500 rows)
+- `GET /api/admin/candidates` for candidate review queue + stats
+- `POST /api/admin/review` with `{address, chain, action, reviewer}`
+- `POST /api/admin/jobs/run` for manual cron trigger (self-learning, label scrape, verify, arkham sync)
+
+## Scheduler jobs (APScheduler, UTC)
+
+- `03:00` daily: `self_learning_sweep`
+- `05:00` weekly (Monday): `etherscan_label_scrape`
+- `05:30` daily: `arkham_sync` (skips if no key)
+- `06:00` daily: `verify_active_contracts`

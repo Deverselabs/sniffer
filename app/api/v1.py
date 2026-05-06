@@ -4,11 +4,13 @@ import csv
 import io
 import os
 import asyncio
+import json
 from typing import Any, Dict, Literal
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
+from app.db import get_conn
 from app.services.ethereum import eth_snapshot
 from app.services.scorer import score
 from app.services.solana import sol_balance, sol_deposits
@@ -78,13 +80,44 @@ async def scan_wallet(body: ScanRequest) -> Dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"{chain} scan failed: {exc}") from exc
 
-    return {
+    response_payload = {
         "address": address,
         "chain": chain,
         "balance": snapshot["balance"],
         "deposits": snapshot["deposits"],
         "score": scoring,
     }
+    _persist_scan_result(address, chain, scoring, response_payload)
+    return response_payload
+
+
+def _persist_scan_result(address: str, chain: str, scoring: dict[str, Any], payload: dict[str, Any]) -> None:
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO wallet_scores (wallet_address, chain, total_score, tier_breakdown, metadata)
+                    VALUES (%s, %s, %s, %s::jsonb, %s::jsonb)
+                    """,
+                    (
+                        address.lower(),
+                        chain,
+                        int(scoring.get("total", 0)),
+                        json.dumps(scoring.get("tiers", [])),
+                        json.dumps(scoring.get("details", {})),
+                    ),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO scan_log (wallet_address, chain, scan_status, request_payload, response_payload)
+                    VALUES (%s, %s, 'success', %s::jsonb, %s::jsonb)
+                    """,
+                    (address.lower(), chain, json.dumps({"address": address, "chain": chain}), json.dumps(payload)),
+                )
+            conn.commit()
+    except Exception:
+        return
 
 
 @router.post("/batch")

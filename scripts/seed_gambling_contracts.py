@@ -36,6 +36,22 @@ def main() -> None:
                         record.get("chain", "ethereum"),
                     ),
                 )
+                if record["status"] == "candidate":
+                    cur.execute(
+                        """
+                        INSERT INTO contract_candidates
+                            (address, chain, source, confidence, status, tx_pattern_summary, metadata)
+                        VALUES (%s, %s, %s, %s, 'pending', %s, '{}'::jsonb)
+                        ON CONFLICT (address, chain, source) DO NOTHING
+                        """,
+                        (
+                            record["address"].lower(),
+                            record.get("chain", "ethereum"),
+                            "seed_migration",
+                            record["confidence"],
+                            "seeded candidate from gambling.json",
+                        ),
+                    )
         conn.commit()
 
     verified = sum(1 for record in records if record["status"] == "verified")
