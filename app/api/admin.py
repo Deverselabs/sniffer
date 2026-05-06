@@ -21,7 +21,11 @@ class ReviewRequest(BaseModel):
     note: str | None = None
 
 
-@router.get("/candidates")
+@router.get(
+    "/candidates",
+    summary="List contract candidates",
+    description="Paginated candidate contracts with discovery metadata and admin stats.",
+)
 async def get_candidates(page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100)) -> dict[str, Any]:
     offset = (page - 1) * page_size
     with get_conn() as conn:
@@ -84,7 +88,11 @@ async def get_candidates(page: int = Query(1, ge=1), page_size: int = Query(25, 
     }
 
 
-@router.post("/review")
+@router.post(
+    "/review",
+    summary="Review candidate",
+    description="Approve, reject, or mark candidate as needs_more with reviewer audit log.",
+)
 async def review_candidate(body: ReviewRequest) -> dict[str, Any]:
     status_map = {"approve": "approved", "reject": "rejected", "needs_more": "needs_more"}
     with get_conn() as conn:
@@ -131,7 +139,11 @@ async def review_candidate(body: ReviewRequest) -> dict[str, Any]:
     return {"ok": True, "address": body.address.lower(), "action": body.action}
 
 
-@router.post("/jobs/run")
+@router.post(
+    "/jobs/run",
+    summary="Run scheduler jobs now",
+    description="Manual trigger for all scheduled discovery/verification jobs.",
+)
 async def run_jobs() -> dict[str, Any]:
     return {
         "self_learning_sweep": await self_learning_sweep(),

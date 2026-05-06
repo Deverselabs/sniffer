@@ -28,6 +28,14 @@ services:
           property: connectionString
       - key: ADMIN_SHARED_SECRET
         sync: false
+      - key: WEBHOOK_SHARED_SECRET
+        sync: false
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
 databases:
   - name: sniffer-db
     databaseName: sniffer

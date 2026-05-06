@@ -14,6 +14,17 @@ interface ScanApiResponse {
   }>;
 }
 
+interface AlertsRecentResponse {
+  count: number;
+  items: Array<{
+    address: string;
+    chain: Chain;
+    score: number;
+    route: string;
+    created_at: string | null;
+  }>;
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export async function fetchWalletData(address: string, chain: Chain): Promise<WalletData> {
@@ -36,6 +47,11 @@ export async function fetchWalletData(address: string, chain: Chain): Promise<Wa
     incomingTx,
     uniqueSenders,
   };
+}
+
+export async function fetchRecentAlerts(): Promise<AlertsRecentResponse> {
+  const res = await axios.get<AlertsRecentResponse>(`${API_BASE}/api/v1/alerts/recent`);
+  return res.data;
 }
 
 export type { Chain, WalletData, Transaction };

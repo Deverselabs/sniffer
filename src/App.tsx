@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { fetchRecentAlerts } from "./api";
 import type { Chain, WalletData } from "./api";
 import { BulkUpload } from "./components/BulkUpload";
 import DogLogo from "./components/DogLogo";
@@ -19,6 +20,7 @@ function App() {
   const [profile, setProfile] = useState<IndustryProfile>("casino");
   const [chain, setChain] = useState<Chain>("ethereum");
   const [address, setAddress] = useState("");
+  const [toasts, setToasts] = useState<Array<{ id: string; text: string }>>([]);
   const rootWallet = useWalletData();
   const senderWallet = useWalletData();
 
@@ -68,6 +70,31 @@ function App() {
     void handleRootSubmit(trimmed, activeChain);
   }
 
+  useEffect(() => {
+    let mounted = true;
+    async function pollAlerts() {
+      try {
+        const data = await fetchRecentAlerts();
+        if (!mounted) return;
+        const next = data.items.slice(0, 3).map((item) => ({
+          id: `${item.address}-${item.score}-${item.created_at ?? ""}`,
+          text: `${item.chain.toUpperCase()} whale ${item.address.slice(0, 6)}... score ${item.score}`,
+        }));
+        setToasts(next);
+      } catch {
+        return;
+      }
+    }
+    void pollAlerts();
+    const timer = window.setInterval(() => {
+      void pollAlerts();
+    }, 30000);
+    return () => {
+      mounted = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
   return (
     <div
       style={{
@@ -93,6 +120,24 @@ function App() {
           pointerEvents: "none",
         }}
       />
+      <div style={{ position: "fixed", right: 16, bottom: 16, zIndex: 70, display: "grid", gap: 8 }}>
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            style={{
+              background: "rgba(127,119,221,0.15)",
+              border: "1px solid rgba(127,119,221,0.35)",
+              borderRadius: 8,
+              padding: "10px 12px",
+              color: "#E8E6FF",
+              fontSize: 12,
+              fontFamily: "'Courier New', monospace",
+            }}
+          >
+            Whale alert: {toast.text}
+          </div>
+        ))}
+      </div>
 
       <nav
         style={{

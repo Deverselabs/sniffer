@@ -49,6 +49,7 @@ This repo now includes a Python scoring engine and Postgres schema used for 10-t
 - Migration: `migrations/001_init.sql`
 - Migration: `migrations/002_multichain.sql`
 - Migration: `migrations/003_admin_candidates.sql`
+- Migration: `migrations/004_alerting.sql`
 - Seed source: `data/gambling.json`
 - Seed script: `scripts/seed_gambling_contracts.py`
 
@@ -66,6 +67,7 @@ uvicorn app.main:app --reload
 psql postgresql://postgres:postgres@localhost:5432/sniffer -f migrations/001_init.sql
 psql postgresql://postgres:postgres@localhost:5432/sniffer -f migrations/002_multichain.sql
 psql postgresql://postgres:postgres@localhost:5432/sniffer -f migrations/003_admin_candidates.sql
+psql postgresql://postgres:postgres@localhost:5432/sniffer -f migrations/004_alerting.sql
 python scripts/seed_gambling_contracts.py
 ```
 
@@ -93,6 +95,8 @@ Required env vars in Render service:
 
 - `POST /api/v1/scan` with `{ "address": "...", "chain": "ethereum|tron|solana" }`
 - `POST /api/v1/batch` with CSV upload containing `address,chain` columns (up to 500 rows)
+- `POST /api/v1/webhook` with HMAC signature header `x-sniffer-signature`
+- `GET /api/v1/alerts/recent` for real-time whale toasts
 - `GET /api/admin/candidates` for candidate review queue + stats
 - `POST /api/admin/review` with `{address, chain, action, reviewer}`
 - `POST /api/admin/jobs/run` for manual cron trigger (self-learning, label scrape, verify, arkham sync)
@@ -100,9 +104,32 @@ Required env vars in Render service:
 All `/api/admin/*` endpoints require header:
 - `x-admin-secret: <ADMIN_SHARED_SECRET>`
 
+Webhook signature:
+- Body HMAC SHA256 over raw request payload
+- Header format: `x-sniffer-signature: sha256=<hex_digest>`
+
 ## Scheduler jobs (APScheduler, UTC)
 
 - `03:00` daily: `self_learning_sweep`
 - `05:00` weekly (Monday): `etherscan_label_scrape`
 - `05:30` daily: `arkham_sync` (skips if no key)
 - `06:00` daily: `verify_active_contracts`
+
+## Docker
+
+```bash
+docker-compose up --build
+```
+
+Starts:
+- API at `http://localhost:8000`
+- Postgres on `localhost:5432`
+
+Healthcheck:
+- `GET /health`
+
+## Load test
+
+```bash
+k6 run tests/load_test.js
+```

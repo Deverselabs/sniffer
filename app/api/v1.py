@@ -5,12 +5,16 @@ import io
 import os
 import asyncio
 import json
+import hmac
+import hashlib
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Literal
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from app.db import get_conn
+from app.services.notify import notify
 from app.services.ethereum import eth_snapshot
 from app.services.scorer import score
 from app.services.solana import sol_balance, sol_deposits
@@ -22,8 +26,20 @@ SUPPORTED_CHAINS = {"ethereum", "tron", "solana"}
 
 
 class ScanRequest(BaseModel):
+    """Request payload for scanning one wallet."""
+
     address: str = Field(..., min_length=2)
     chain: Literal["ethereum", "tron", "solana"] = "ethereum"
+
+
+class WebhookRequest(BaseModel):
+    """Inbound webhook payload from casino/exchange deposit systems."""
+
+    event_id: str
+    sender_wallet: str
+    chain: Literal["ethereum", "tron", "solana"] = "ethereum"
+    deposit_amount: float = Field(default=0, ge=0)
+    tx_hash: str | None = None
 
 
 def _normalize_for_score(address: str, deposits: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
@@ -40,8 +56,12 @@ def _normalize_for_score(address: str, deposits: list[Dict[str, Any]]) -> list[D
     return normalized
 
 
-@router.post("/scan")
-async def scan_wallet(body: ScanRequest) -> Dict[str, Any]:
+@router.post(
+    "/scan",
+    summary="Scan wallet score",
+    description="Scan a wallet address on ethereum/tron/solana and return score + deposits.",
+)
+async def scan_wallet(body: ScanRequest, background_tasks: BackgroundTasks) -> Dict[str, Any]:
     address = body.address.strip()
     chain = body.chain
     if not validate_address(chain, address):
@@ -88,6 +108,17 @@ async def scan_wallet(body: ScanRequest) -> Dict[str, Any]:
         "score": scoring,
     }
     _persist_scan_result(address, chain, scoring, response_payload)
+    if int(scoring.get("total", 0)) >= 50:
+        background_tasks.add_task(
+            notify,
+            {
+                "address": address,
+                "chain": chain,
+                "score": int(scoring.get("total", 0)),
+                "tier": scoring.get("tier"),
+                "source": "scan",
+            },
+        )
     return response_payload
 
 
@@ -120,7 +151,11 @@ def _persist_scan_result(address: str, chain: str, scoring: dict[str, Any], payl
         return
 
 
-@router.post("/batch")
+@router.post(
+    "/batch",
+    summary="Batch scan CSV",
+    description="Upload CSV with address,chain columns. Supports up to 500 rows.",
+)
 async def batch_scan(file: UploadFile = File(...)) -> Dict[str, Any]:
     if not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Upload a CSV file with address,chain columns")
@@ -153,3 +188,71 @@ async def batch_scan(file: UploadFile = File(...)) -> Dict[str, Any]:
         results.append(result)
 
     return {"count": len(results), "results": results}
+
+
+def _verify_webhook_signature(body_bytes: bytes, signature: str | None) -> bool:
+    secret = os.getenv("WEBHOOK_SHARED_SECRET", "").strip()
+    if not secret:
+        return False
+    if not signature:
+        return False
+    digest = hmac.new(secret.encode("utf-8"), body_bytes, hashlib.sha256).hexdigest()
+    expected = f"sha256={digest}"
+    return hmac.compare_digest(expected, signature)
+
+
+@router.post(
+    "/webhook",
+    summary="Deposit webhook",
+    description="Accept signed deposit event, auto-score sender wallet and trigger alerts.",
+)
+async def webhook_scan(request: Request, background_tasks: BackgroundTasks) -> Dict[str, Any]:
+    raw = await request.body()
+    signature = request.headers.get("x-sniffer-signature")
+    if not _verify_webhook_signature(raw, signature):
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+    try:
+        payload = WebhookRequest.model_validate_json(raw)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Invalid webhook payload: {exc}") from exc
+
+    result = await scan_wallet(ScanRequest(address=payload.sender_wallet, chain=payload.chain), background_tasks)
+    return {
+        "event_id": payload.event_id,
+        "webhook_status": "processed",
+        "scan_result": result,
+    }
+
+
+@router.get(
+    "/alerts/recent",
+    summary="Recent whale alerts",
+    description="Return alerts with score >= 70 from last 5 minutes.",
+)
+async def alerts_recent() -> Dict[str, Any]:
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT address, chain, score, route, payload::text, created_at
+                FROM alerts_log
+                WHERE score >= 70 AND created_at >= %s
+                ORDER BY created_at DESC
+                LIMIT 100
+                """,
+                (cutoff,),
+            )
+            rows = cur.fetchall()
+    items = [
+        {
+            "address": row[0],
+            "chain": row[1],
+            "score": int(row[2]),
+            "route": row[3],
+            "payload": json.loads(row[4] or "{}"),
+            "created_at": row[5].isoformat() if row[5] else None,
+        }
+        for row in rows
+    ]
+    return {"count": len(items), "items": items}

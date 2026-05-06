@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sniffer
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sniffer"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/sniffer
+      ETHERSCAN_API_KEY: ${ETHERSCAN_API_KEY}
+      TRONGRID_API_KEY: ${TRONGRID_API_KEY}
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL:-https://api.mainnet-beta.solana.com}
+      ADMIN_SHARED_SECRET: ${ADMIN_SHARED_SECRET}
+      WEBHOOK_SHARED_SECRET: ${WEBHOOK_SHARED_SECRET}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./migrations:/app/migrations
+      - ./scripts:/app/scripts
+
+volumes:
+  pgdata:

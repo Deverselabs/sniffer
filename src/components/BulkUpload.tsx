@@ -42,6 +42,7 @@ interface ScannedRow {
   uniqueSenders: number;
   walletAgeDays: number;
   gamblingInteractions: number;
+  tierBreakdown: Record<string, number>;
 }
 
 function parseFirstColumn(row: string): string {
@@ -171,6 +172,7 @@ export function BulkUpload({ onAddressSelect, profile, chain }: BulkUploadProps)
           uniqueSenders: data.uniqueSenders,
           walletAgeDays: score.walletAgeDays,
           gamblingInteractions: score.gamblingTxCount,
+          tierBreakdown: Object.fromEntries(score.tiers.map((t) => [t.label, t.points])),
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to fetch";
@@ -186,6 +188,7 @@ export function BulkUpload({ onAddressSelect, profile, chain }: BulkUploadProps)
           uniqueSenders: 0,
           walletAgeDays: 0,
           gamblingInteractions: 0,
+          tierBreakdown: {},
         });
       }
 
@@ -269,6 +272,16 @@ export function BulkUpload({ onAddressSelect, profile, chain }: BulkUploadProps)
         "unique_senders",
         "wallet_age_days",
         "gambling_interactions",
+        "t1_wallet_wealth",
+        "t2_gambling_signal",
+        "t3_transaction_volume",
+        "t4_wallet_age",
+        "t5_unique_senders",
+        "t6_avg_deposit_size",
+        "t7_recent_activity",
+        "t8_large_deposit_count",
+        "t9_balance_strength",
+        "t10_risk_adjustment",
         "explorer_link",
       ],
       ...exportRows.map((row) => [
@@ -281,6 +294,16 @@ export function BulkUpload({ onAddressSelect, profile, chain }: BulkUploadProps)
         row.error ? "" : String(row.uniqueSenders),
         row.error ? "" : String(Math.floor(row.walletAgeDays)),
         row.error ? "" : String(row.gamblingInteractions),
+        row.error ? "" : String(row.tierBreakdown["T1 Wallet Wealth"] ?? 0),
+        row.error ? "" : String(row.tierBreakdown["T2 Gambling Signal"] ?? 0),
+        row.error ? "" : String(row.tierBreakdown["T3 Transaction Volume"] ?? 0),
+        row.error ? "" : String(row.tierBreakdown["T4 Wallet Age"] ?? 0),
+        row.error ? "" : String(row.tierBreakdown["T5 Unique Senders"] ?? 0),
+        row.error ? "" : String(row.tierBreakdown["T6 Avg Deposit Size"] ?? 0),
+        row.error ? "" : String(row.tierBreakdown["T7 Recent Activity"] ?? 0),
+        row.error ? "" : String(row.tierBreakdown["T8 Large Deposit Count"] ?? 0),
+        row.error ? "" : String(row.tierBreakdown["T9 Balance Strength"] ?? 0),
+        row.error ? "" : String(row.tierBreakdown["T10 Risk Adjustment"] ?? 0),
         `${explorerBase(chain)}/address/${row.address}`,
       ]),
     ];

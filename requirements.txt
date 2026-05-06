@@ -1,5 +1,6 @@
 psycopg[binary]
 pytest
+pytest-asyncio
 fastapi
 uvicorn
 httpx
