@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-import httpx
+from app.services.http_client import UpstreamHTTPError, get_json_with_retry
 
 TRONGRID_BASE_URL = "https://api.trongrid.io/v1"
 
@@ -14,11 +14,10 @@ class TronServiceError(RuntimeError):
 async def tron_balance(address: str, api_key: str | None = None) -> float:
     headers = {"TRON-PRO-API-KEY": api_key} if api_key else {}
     url = f"{TRONGRID_BASE_URL}/accounts/{address}"
-    async with httpx.AsyncClient(timeout=20) as client:
-        response = await client.get(url, headers=headers)
-    if response.status_code >= 400:
-        raise TronServiceError(f"TronGrid balance failed: {response.status_code} {response.text}")
-    payload = response.json()
+    try:
+        payload = await get_json_with_retry(url, headers=headers, timeout=20)
+    except UpstreamHTTPError as exc:
+        raise TronServiceError(f"TronGrid balance failed: {exc}") from exc
     account_rows = payload.get("data", [])
     if not account_rows:
         return 0.0
@@ -35,12 +34,10 @@ async def tron_deposits(address: str, api_key: str | None = None, limit: int = 2
     url = f"{TRONGRID_BASE_URL}/accounts/{address}/transactions"
     params = {"only_to": "true", "limit": str(limit), "order_by": "block_timestamp,desc"}
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.get(url, params=params, headers=headers)
-    if response.status_code >= 400:
-        raise TronServiceError(f"TronGrid deposits failed: {response.status_code} {response.text}")
-
-    payload = response.json()
+    try:
+        payload = await get_json_with_retry(url, params=params, headers=headers, timeout=30)
+    except UpstreamHTTPError as exc:
+        raise TronServiceError(f"TronGrid deposits failed: {exc}") from exc
     tx_rows = payload.get("data", [])
     if not isinstance(tx_rows, list):
         raise TronServiceError("Unexpected TronGrid transactions payload shape")

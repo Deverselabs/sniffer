@@ -84,6 +84,7 @@ Required env vars in Render service:
 - `ETHERSCAN_API_KEY` (required)
 - `TRONGRID_API_KEY` (required for TRX scans)
 - `SOLANA_RPC_URL` (optional override, default mainnet-beta)
+- `ADMIN_SHARED_SECRET` (required for `/api/admin/*`)
 - `MORALIS_API_KEY` (required only if backend/API usage is enabled)
 - `ARKHAM_API_KEY` (optional)
 - `DATABASE_URL` (auto-injected from `sniffer-postgres` in blueprint)
@@ -95,6 +96,9 @@ Required env vars in Render service:
 - `GET /api/admin/candidates` for candidate review queue + stats
 - `POST /api/admin/review` with `{address, chain, action, reviewer}`
 - `POST /api/admin/jobs/run` for manual cron trigger (self-learning, label scrape, verify, arkham sync)
+
+All `/api/admin/*` endpoints require header:
+- `x-admin-secret: <ADMIN_SHARED_SECRET>`
 
 ## Scheduler jobs (APScheduler, UTC)
 

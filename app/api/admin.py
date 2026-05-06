@@ -3,13 +3,14 @@ from __future__ import annotations
 import json
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.db import get_conn
+from app.security import require_admin_secret
 from app.services.jobs import arkham_sync, etherscan_label_scrape, self_learning_sweep, verify_active_contracts
 
-router = APIRouter(prefix="/api/admin", tags=["admin"])
+router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin_secret)])
 
 
 class ReviewRequest(BaseModel):

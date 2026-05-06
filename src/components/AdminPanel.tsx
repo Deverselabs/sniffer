@@ -24,10 +24,20 @@ export default function AdminPanel() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(false);
   const [reviewer, setReviewer] = useState("admin");
+  const [adminSecret, setAdminSecret] = useState(() => localStorage.getItem("sniffer_admin_secret") ?? "");
+  const [error, setError] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
-    const res = await fetch(`${API_BASE}/api/admin/candidates?page=1&page_size=50`);
+    setError(null);
+    const res = await fetch(`${API_BASE}/api/admin/candidates?page=1&page_size=50`, {
+      headers: { "x-admin-secret": adminSecret },
+    });
+    if (!res.ok) {
+      setLoading(false);
+      setError(`Failed to load candidates (${res.status})`);
+      return;
+    }
     const data = await res.json();
     setItems(data.items ?? []);
     setStats(data.stats ?? null);
@@ -35,15 +45,22 @@ export default function AdminPanel() {
   }
 
   useEffect(() => {
-    void load();
-  }, []);
+    if (adminSecret) {
+      localStorage.setItem("sniffer_admin_secret", adminSecret);
+      void load();
+    }
+  }, [adminSecret]);
 
   async function review(address: string, chain: string, action: "approve" | "reject" | "needs_more") {
-    await fetch(`${API_BASE}/api/admin/review`, {
+    const res = await fetch(`${API_BASE}/api/admin/review`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-admin-secret": adminSecret },
       body: JSON.stringify({ address, chain, action, reviewer }),
     });
+    if (!res.ok) {
+      setError(`Review request failed (${res.status})`);
+      return;
+    }
     await load();
   }
 
@@ -58,6 +75,16 @@ export default function AdminPanel() {
           className="rounded bg-[rgba(255,255,255,0.08)] px-2 py-1 text-sm"
         />
       </div>
+      <div className="rounded-lg border border-[rgba(127,119,221,0.25)] bg-[rgba(127,119,221,0.08)] p-3">
+        <label className="mr-2 text-sm">Admin Secret:</label>
+        <input
+          value={adminSecret}
+          onChange={(e) => setAdminSecret(e.target.value)}
+          type="password"
+          className="rounded bg-[rgba(255,255,255,0.08)] px-2 py-1 text-sm"
+        />
+      </div>
+      {error && <div className="rounded border border-red-500/40 bg-red-500/10 p-2 text-sm text-red-200">{error}</div>}
 
       {stats && (
         <section className="grid grid-cols-2 gap-3 md:grid-cols-4">

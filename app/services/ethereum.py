@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-import httpx
+from app.services.http_client import UpstreamHTTPError, get_json_with_retry
 
 ETHERSCAN_BASE = "https://api.etherscan.io/v2/api"
 
@@ -13,12 +13,13 @@ class EthereumServiceError(RuntimeError):
 
 async def eth_snapshot(address: str, api_key: str) -> Dict[str, Any]:
     params_common = {"chainid": 1, "apikey": api_key}
-    async with httpx.AsyncClient(timeout=30) as client:
-        bal_req = client.get(
+    try:
+        bal_body = await get_json_with_retry(
             ETHERSCAN_BASE,
             params={**params_common, "module": "account", "action": "balance", "address": address, "tag": "latest"},
+            timeout=30,
         )
-        tx_req = client.get(
+        tx_body = await get_json_with_retry(
             ETHERSCAN_BASE,
             params={
                 **params_common,
@@ -29,18 +30,16 @@ async def eth_snapshot(address: str, api_key: str) -> Dict[str, Any]:
                 "endblock": 99999999,
                 "sort": "desc",
             },
+            timeout=30,
         )
-        price_req = client.get(
+        price_body = await get_json_with_retry(
             ETHERSCAN_BASE,
             params={**params_common, "module": "stats", "action": "ethprice"},
+            timeout=20,
+            retries=2,
         )
-        bal_res, tx_res, price_res = await bal_req, await tx_req, await price_req
-
-    if bal_res.status_code >= 400 or tx_res.status_code >= 400:
-        raise EthereumServiceError("Etherscan request failed.")
-    bal_body = bal_res.json()
-    tx_body = tx_res.json()
-    price_body = price_res.json() if price_res.status_code < 400 else {}
+    except UpstreamHTTPError as exc:
+        raise EthereumServiceError(f"Etherscan request failed: {exc}") from exc
     balance_eth = float(bal_body.get("result", "0")) / 1e18 if bal_body.get("result") else 0.0
     eth_price = float(price_body.get("result", {}).get("ethusd", 0) or 0)
     raw_txs = tx_body.get("result", [])

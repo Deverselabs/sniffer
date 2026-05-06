@@ -4,7 +4,7 @@ import asyncio
 import os
 from typing import Any, Dict, List
 
-import httpx
+from app.services.http_client import UpstreamHTTPError, post_json_with_retry
 
 SOLANA_RPC_URL = os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
 
@@ -15,11 +15,10 @@ class SolanaServiceError(RuntimeError):
 
 async def _rpc_call(method: str, params: list[Any]) -> Dict[str, Any]:
     payload = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.post(SOLANA_RPC_URL, json=payload)
-    if response.status_code >= 400:
-        raise SolanaServiceError(f"Solana RPC failed: {response.status_code} {response.text}")
-    body = response.json()
+    try:
+        body = await post_json_with_retry(SOLANA_RPC_URL, payload=payload, timeout=30)
+    except UpstreamHTTPError as exc:
+        raise SolanaServiceError(f"Solana RPC failed: {exc}") from exc
     if body.get("error"):
         raise SolanaServiceError(f"Solana RPC error: {body['error']}")
     return body
@@ -40,25 +39,22 @@ async def sol_deposits(address: str, limit: int = 200, batch_size: int = 25) -> 
     deposits: List[Dict[str, Any]] = []
     for idx in range(0, len(signatures), batch_size):
         batch = signatures[idx : idx + batch_size]
-        async with httpx.AsyncClient(timeout=60) as client:
-            tasks = [
-                client.post(
-                    SOLANA_RPC_URL,
-                    json={
-                        "jsonrpc": "2.0",
-                        "id": signature,
-                        "method": "getTransaction",
-                        "params": [signature, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}],
-                    },
-                )
-                for signature in batch
-            ]
-            responses = await asyncio.gather(*tasks)
+        tasks = [
+            post_json_with_retry(
+                SOLANA_RPC_URL,
+                payload={
+                    "jsonrpc": "2.0",
+                    "id": signature,
+                    "method": "getTransaction",
+                    "params": [signature, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}],
+                },
+                timeout=60,
+            )
+            for signature in batch
+        ]
+        responses = await asyncio.gather(*tasks)
 
-        for response in responses:
-            if response.status_code >= 400:
-                continue
-            payload = response.json()
+        for payload in responses:
             result = payload.get("result")
             if not result:
                 continue
