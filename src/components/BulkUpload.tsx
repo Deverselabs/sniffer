@@ -28,6 +28,8 @@ interface BulkUploadProps {
   onAddressSelect: (address: string) => void;
   profile: IndustryProfile;
   chain: Chain;
+  /** Return to main landing (hero) without leaving bulk mode parent — caller resets mode */
+  onCloseToLanding?: () => void;
 }
 
 interface ScannedRow {
@@ -64,7 +66,7 @@ function sleep(ms: number) {
   });
 }
 
-export function BulkUpload({ onAddressSelect, profile, chain }: BulkUploadProps) {
+export function BulkUpload({ onAddressSelect, profile, chain, onCloseToLanding }: BulkUploadProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [fileName, setFileName] = useState<string>("");
   const [addresses, setAddresses] = useState<string[]>([]);
@@ -142,6 +144,22 @@ export function BulkUpload({ onAddressSelect, profile, chain }: BulkUploadProps)
     event.preventDefault();
     const file = event.dataTransfer.files?.[0] ?? null;
     handleFileSelect(file);
+  }
+
+  function resetCsvUpload() {
+    setFileName("");
+    setAddresses([]);
+    setSkippedRows(0);
+    setRows([]);
+    setParseError(null);
+    setProgress({ current: 0, total: 0 });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  function openFilePicker() {
+    fileInputRef.current?.click();
   }
 
   async function runScan() {
@@ -313,19 +331,59 @@ export function BulkUpload({ onAddressSelect, profile, chain }: BulkUploadProps)
   }
 
   return (
-    <section className="space-y-4">
+    <section className="ui-surface ui-stack ui-panel-bulk">
+      <div className="ui-row-between items-start">
+        <div>
+          <h2 className="ui-section-title">Bulk sniff</h2>
+          <p className="ui-lede">Upload a CSV, run all wallets, export for BI tools.</p>
+        </div>
+        <div className="ui-row shrink-0">
+          {(fileName || addresses.length > 0 || rows.length > 0) && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                resetCsvUpload();
+                openFilePicker();
+              }}
+              className="ui-btn ui-btn--ghost ui-btn-tiny"
+            >
+              Another CSV
+            </button>
+          )}
+          {onCloseToLanding && (
+            <button
+              type="button"
+              title="Close and return to landing"
+              aria-label="Close bulk upload and return to landing page"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCloseToLanding();
+              }}
+              className="ui-btn ui-btn-close ui-btn--square"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      </div>
+
       <div
         onDrop={handleDrop}
         onDragOver={(event) => event.preventDefault()}
-        onClick={() => fileInputRef.current?.click()}
-        className="cursor-pointer rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center transition hover:border-gray-500 hover:bg-gray-100"
+        onClick={() => openFilePicker()}
+        className="ui-dropzone"
       >
-        <p className="text-sm font-semibold text-gray-900">Upload CSV of wallet addresses</p>
-        <p className="mt-1 text-xs text-gray-600">
+        <p className="ui-text-body font-semibold text-[rgba(255,255,255,0.85)]">
+          Upload CSV of wallet addresses
+        </p>
+        <p className="ui-text-caption ui-mt-tight">
           One address per row. First column must be the address. Column header optional. Max 100
           addresses.
         </p>
-        {fileName && <p className="mt-3 text-sm text-gray-800">Selected file: {fileName}</p>}
+        {fileName && (
+          <p className="ui-text-body ui-mt font-mono text-[rgba(175,169,236,0.9)]">Selected file: {fileName}</p>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -335,37 +393,44 @@ export function BulkUpload({ onAddressSelect, profile, chain }: BulkUploadProps)
         />
       </div>
 
-      {parseError && (
-        <section className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {parseError}
-        </section>
-      )}
+      {parseError && <section className="ui-banner-danger">{parseError}</section>}
 
       {addresses.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-sm text-gray-700">Found {addresses.length} valid addresses</p>
+        <div className="ui-stack-tight">
+          <p className="ui-text-mono-muted">
+            Found {addresses.length} valid {chain.toUpperCase()} addresses
+          </p>
           {skippedRows > 0 && (
-            <p className="text-sm text-amber-700">{skippedRows} row(s) were skipped.</p>
+            <p className="ui-text-body text-amber-300/90">{skippedRows} row(s) were skipped.</p>
           )}
-          <button
-            type="button"
-            onClick={runScan}
-            disabled={isScanning}
-            className="rounded-lg bg-gray-900 px-5 py-2 text-sm font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isScanning ? "Scanning..." : "Run Whale Radar on all"}
-          </button>
+          <div className="ui-row">
+            <button type="button" className="ui-btn ui-btn--primary" onClick={runScan} disabled={isScanning}>
+              {isScanning ? "Scanning..." : "Run Whale Radar on all"}
+            </button>
+            <button
+              type="button"
+              className="ui-btn ui-btn--ghost"
+              onClick={(e) => {
+                e.stopPropagation();
+                resetCsvUpload();
+                openFilePicker();
+              }}
+              disabled={isScanning}
+            >
+              Choose different file
+            </button>
+          </div>
         </div>
       )}
 
       {isScanning && (
-        <div className="space-y-2 rounded-lg border border-gray-200 bg-white p-3">
-          <p className="text-sm text-gray-700">
+        <div className="ui-stack-tight ui-card ui-card--muted">
+          <p className="ui-text-mono-muted">
             Scanning {progress.current} of {progress.total}...
           </p>
-          <div className="h-2.5 w-full rounded-full bg-gray-100">
+          <div className="ui-progress-track">
             <div
-              className="h-2.5 rounded-full bg-indigo-500 transition-all"
+              className="ui-progress-fill"
               style={{
                 width:
                   progress.total > 0
@@ -378,102 +443,86 @@ export function BulkUpload({ onAddressSelect, profile, chain }: BulkUploadProps)
       )}
 
       {!isScanning && rows.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-sm text-gray-600">
-            Scored using: {INDUSTRY_PROFILES[profile].emoji} {INDUSTRY_PROFILES[profile].label}{" "}
-            profile
+        <div className="ui-stack-tight">
+          <p className="ui-text-body text-[rgba(255,255,255,0.45)]">
+            Scored using: {INDUSTRY_PROFILES[profile].emoji} {INDUSTRY_PROFILES[profile].label} profile
           </p>
-          <button
-            type="button"
-            onClick={handleDownloadCsv}
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-          >
-            Download scored results as CSV
-          </button>
-          <div className="overflow-x-auto rounded-xl border border-gray-200">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-left text-gray-600">
+          <div className="ui-row">
+            <button type="button" className="ui-btn ui-btn--ghost" onClick={handleDownloadCsv}>
+              Download scored results as CSV
+            </button>
+            <button
+              type="button"
+              className="ui-btn ui-btn--ghost"
+              style={{ borderColor: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.45)" }}
+              onClick={() => {
+                resetCsvUpload();
+              }}
+            >
+              Load another CSV
+            </button>
+          </div>
+          <div className="ui-table-wrap">
+            <table className="ui-table">
+              <thead>
                 <tr>
-                  <th className="cursor-pointer px-3 py-2 font-medium" onClick={() => toggleSort("address")}>
+                  <th className="ui-th-sort" onClick={() => toggleSort("address")}>
                     Address
                   </th>
-                  <th className="cursor-pointer px-3 py-2 font-medium" onClick={() => toggleSort("score")}>
+                  <th className="ui-th-sort" onClick={() => toggleSort("score")}>
                     Whale Score
                   </th>
-                  <th className="cursor-pointer px-3 py-2 font-medium" onClick={() => toggleSort("tier")}>
+                  <th className="ui-th-sort" onClick={() => toggleSort("tier")}>
                     Tier label
                   </th>
-                  <th className="cursor-pointer px-3 py-2 font-medium" onClick={() => toggleSort("balanceEth")}>
+                  <th className="ui-th-sort" onClick={() => toggleSort("balanceEth")}>
                     ETH Balance
                   </th>
-                  <th
-                    className="cursor-pointer px-3 py-2 font-medium"
-                    onClick={() => toggleSort("totalEthReceived")}
-                  >
+                  <th className="ui-th-sort" onClick={() => toggleSort("totalEthReceived")}>
                     Total ETH Received
                   </th>
-                  <th
-                    className="cursor-pointer px-3 py-2 font-medium"
-                    onClick={() => toggleSort("incomingTxns")}
-                  >
+                  <th className="ui-th-sort" onClick={() => toggleSort("incomingTxns")}>
                     Incoming Txns
                   </th>
-                  <th
-                    className="cursor-pointer px-3 py-2 font-medium"
-                    onClick={() => toggleSort("uniqueSenders")}
-                  >
+                  <th className="ui-th-sort" onClick={() => toggleSort("uniqueSenders")}>
                     Unique Senders
                   </th>
-                  <th
-                    className="cursor-pointer px-3 py-2 font-medium"
-                    onClick={() => toggleSort("walletAgeDays")}
-                  >
+                  <th className="ui-th-sort" onClick={() => toggleSort("walletAgeDays")}>
                     Wallet Age (days)
                   </th>
-                  <th
-                    className="cursor-pointer px-3 py-2 font-medium"
-                    onClick={() => toggleSort("gamblingInteractions")}
-                  >
+                  <th className="ui-th-sort" onClick={() => toggleSort("gamblingInteractions")}>
                     Gambling Interactions
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {sortedRows.map((row) => (
-                  <tr key={row.address} className="border-t border-gray-100">
-                    <td className="px-3 py-2">
-                      <button
-                        type="button"
-                        onClick={() => onAddressSelect(row.address)}
-                        className="font-medium text-indigo-600 hover:underline"
-                      >
+                  <tr key={row.address}>
+                    <td>
+                      <button type="button" className="ui-link font-medium" onClick={() => onAddressSelect(row.address)}>
                         {shortAddr(row.address)}
                       </button>
                     </td>
-                    <td className="px-3 py-2">
+                    <td>
                       {row.error ? (
-                        <span className="text-red-700">Error</span>
+                        <span className="text-[#ffb3b2]">Error</span>
                       ) : (
-                        <span className="font-semibold text-gray-900">{row.score}</span>
+                        <span className="font-semibold text-white">{row.score}</span>
                       )}
                     </td>
-                    <td className="px-3 py-2">
+                    <td>
                       {row.error ? (
-                        <span className="text-red-700">Error</span>
+                        <span className="text-[#ffb3b2]">Error</span>
                       ) : (
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${tierBadgeClass(row.tierColor)}`}
-                        >
-                          {row.tier}
-                        </span>
+                        <span className={`ui-badge-row ${tierBadgeClass(row.tierColor)}`}>{row.tier}</span>
                       )}
                     </td>
-                    <td className="px-3 py-2">{row.error ? "-" : row.balanceEth.toFixed(4)}</td>
-                    <td className="px-3 py-2">{row.error ? "-" : row.totalEthReceived.toFixed(4)}</td>
-                    <td className="px-3 py-2">{row.error ? "-" : row.incomingTxns}</td>
-                    <td className="px-3 py-2">{row.error ? "-" : row.uniqueSenders}</td>
-                    <td className="px-3 py-2">{row.error ? "-" : Math.floor(row.walletAgeDays)}</td>
-                    <td className="px-3 py-2">{row.error ? "-" : row.gamblingInteractions}</td>
+                    <td>{row.error ? "-" : row.balanceEth.toFixed(4)}</td>
+                    <td>{row.error ? "-" : row.totalEthReceived.toFixed(4)}</td>
+                    <td>{row.error ? "-" : row.incomingTxns}</td>
+                    <td>{row.error ? "-" : row.uniqueSenders}</td>
+                    <td>{row.error ? "-" : Math.floor(row.walletAgeDays)}</td>
+                    <td>{row.error ? "-" : row.gamblingInteractions}</td>
                   </tr>
                 ))}
               </tbody>

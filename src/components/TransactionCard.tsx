@@ -23,32 +23,31 @@ export function TransactionCard({
   onAddressClick,
   whaleScore,
 }: TransactionCardProps) {
-  const txLink = chain === "tron"
-    ? `${explorerBase(chain)}/transaction/${tx.hash}`
-    : `${explorerBase(chain)}/tx/${tx.hash}`;
+  const txLink =
+    chain === "tron"
+      ? `${explorerBase(chain)}/transaction/${tx.hash}`
+      : `${explorerBase(chain)}/tx/${tx.hash}`;
   const token = chain === "tron" ? "TRX" : chain === "solana" ? "SOL" : "ETH";
   return (
-    <article className="rounded-lg border border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)] p-4 transition hover:border-[rgba(127,119,221,0.2)]">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-2">
-          <p className="font-mono text-sm text-[rgba(127,119,221,0.6)]">
+    <article className="ui-card-transaction">
+      <div className="ui-row-between items-start">
+        <div className="ui-stack-tight">
+          <p className="ui-text-body text-[rgba(127,119,221,0.6)]">
             From:{" "}
             <button
               type="button"
               onClick={() => onAddressClick(tx.from)}
-              className="font-mono text-[#AFA9EC] transition hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+              className="ui-link font-mono focus:outline-none focus-visible:ring-[0.125em] focus-visible:ring-indigo-300"
             >
               {shortAddr(tx.from)}
             </button>
             {whaleScore !== undefined && (
-              <span
-                className={`ml-2 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${scoreBadgeClasses(whaleScore)}`}
-              >
+              <span className={`ui-badge-row ml-[0.35em] ${scoreBadgeClasses(whaleScore)}`}>
                 {Math.round(whaleScore)}
               </span>
             )}
           </p>
-          <p className="font-mono text-sm text-[rgba(255,255,255,0.2)]">
+          <p className="ui-text-body text-[rgba(255,255,255,0.2)]">
             Tx:{" "}
             <a
               href={txLink}
@@ -62,10 +61,10 @@ export function TransactionCard({
         </div>
 
         <div className="text-right">
-          <p className="font-mono text-base font-semibold text-[#5DCAA5]">
+          <p className="font-mono text-[112.5%] font-semibold text-[#5DCAA5]">
             +{tx.valueEth.toFixed(4)} {token}
           </p>
-          <p className="mt-1 font-mono text-sm text-[rgba(255,255,255,0.15)]">{timeAgo(tx.timestamp)}</p>
+          <p className="ui-text-body mt-[0.25em] text-[rgba(255,255,255,0.15)]">{timeAgo(tx.timestamp)}</p>
         </div>
       </div>
     </article>

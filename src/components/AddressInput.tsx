@@ -31,25 +31,25 @@ export function AddressInput({ onSubmit, loading }: AddressInputProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-2">
-      <div className="flex flex-col gap-3 sm:flex-row">
+    <form onSubmit={handleSubmit} className="ui-stack-tight">
+      <div className="flex w-full flex-col gap-[0.75em] sm:flex-row">
         <input
           value={address}
           onChange={(e) => setAddress(e.target.value)}
           onKeyDown={handleKeyDown}
           type="text"
           placeholder="Enter Ethereum wallet address (0x...)"
-          className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm outline-none transition focus:border-gray-500"
+          className="w-full rounded-[var(--ui-radius)] border border-[rgba(255,255,255,0.2)] bg-[rgba(255,255,255,0.04)] py-[0.5em] pl-[1em] pr-[1em] font-mono text-[87.5%] text-white outline-none transition focus:border-[rgba(127,119,221,0.45)]"
         />
         <button
           type="submit"
           disabled={loading}
-          className="rounded-lg bg-gray-900 px-5 py-2 text-sm font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+          className="ui-btn shrink-0 bg-[#111] text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? "Loading..." : "Track"}
         </button>
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="ui-text-body text-red-400">{error}</p>}
     </form>
   );
 }

@@ -65,74 +65,105 @@ export default function AdminPanel() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-6 text-white">
-      <h1 className="text-2xl font-bold">Admin Contract Review</h1>
-      <div className="rounded-lg border border-[rgba(127,119,221,0.25)] bg-[rgba(127,119,221,0.08)] p-3">
-        <label className="mr-2 text-sm">Reviewer:</label>
+    <main className="app-admin-main ui-stack">
+      <h1 className="ui-title-page">Admin Contract Review</h1>
+      <div className="ui-admin-panel">
+        <label className="ui-text-body" style={{ marginRight: "0.5em" }}>
+          Reviewer:
+        </label>
         <input
           value={reviewer}
           onChange={(e) => setReviewer(e.target.value)}
-          className="rounded bg-[rgba(255,255,255,0.08)] px-2 py-1 text-sm"
+          className="ui-admin-input"
         />
       </div>
-      <div className="rounded-lg border border-[rgba(127,119,221,0.25)] bg-[rgba(127,119,221,0.08)] p-3">
-        <label className="mr-2 text-sm">Admin Secret:</label>
+      <div className="ui-admin-panel">
+        <label className="ui-text-body" style={{ marginRight: "0.5em" }}>
+          Admin Secret:
+        </label>
         <input
           value={adminSecret}
           onChange={(e) => setAdminSecret(e.target.value)}
           type="password"
-          className="rounded bg-[rgba(255,255,255,0.08)] px-2 py-1 text-sm"
+          className="ui-admin-input"
         />
       </div>
-      {error && <div className="rounded border border-red-500/40 bg-red-500/10 p-2 text-sm text-red-200">{error}</div>}
+      {error && (
+        <div className="ui-banner-danger" style={{ borderColor: "rgba(239, 68, 68, 0.4)", color: "#fecaca" }}>
+          {error}
+        </div>
+      )}
 
       {stats && (
-        <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <div className="rounded border border-[rgba(255,255,255,0.15)] p-3">Active: {stats.total_active_contracts}</div>
-          <div className="rounded border border-[rgba(255,255,255,0.15)] p-3">Added week: {stats.added_this_week}</div>
-          <div className="rounded border border-[rgba(255,255,255,0.15)] p-3">Pending: {stats.pending_review_count}</div>
-          <div className="rounded border border-[rgba(255,255,255,0.15)] p-3">Deprecated week: {stats.deprecated_this_week}</div>
+        <section className="ui-admin-grid">
+          <div className="ui-admin-stat">Active: {stats.total_active_contracts}</div>
+          <div className="ui-admin-stat">Added week: {stats.added_this_week}</div>
+          <div className="ui-admin-stat">Pending: {stats.pending_review_count}</div>
+          <div className="ui-admin-stat">Deprecated week: {stats.deprecated_this_week}</div>
         </section>
       )}
 
-      <button
-        onClick={() => load()}
-        className="rounded bg-indigo-600 px-3 py-2 text-sm font-medium hover:bg-indigo-500"
-      >
+      <button type="button" className="ui-btn ui-btn--primary" onClick={() => load()}>
         Refresh
       </button>
 
-      <div className="overflow-x-auto rounded-lg border border-[rgba(127,119,221,0.25)]">
-        <table className="min-w-full text-sm">
-          <thead className="bg-[rgba(255,255,255,0.05)]">
+      <div className="ui-table-wrap">
+        <table className="ui-table">
+          <thead>
             <tr>
-              <th className="px-2 py-2 text-left">Address</th>
-              <th className="px-2 py-2 text-left">Chain</th>
-              <th className="px-2 py-2 text-left">Source</th>
-              <th className="px-2 py-2 text-left">Confidence</th>
-              <th className="px-2 py-2 text-left">Tx Pattern</th>
-              <th className="px-2 py-2 text-left">Overlap</th>
-              <th className="px-2 py-2 text-left">Status</th>
-              <th className="px-2 py-2 text-left">Actions</th>
+              <th>Address</th>
+              <th>Chain</th>
+              <th>Source</th>
+              <th>Confidence</th>
+              <th>Tx Pattern</th>
+              <th>Overlap</th>
+              <th>Status</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td className="px-2 py-3" colSpan={8}>Loading...</td></tr>
+              <tr>
+                <td colSpan={8} style={{ padding: "0.75em 1em" }}>
+                  Loading...
+                </td>
+              </tr>
             ) : (
               items.map((item) => (
-                <tr key={`${item.chain}:${item.address}:${item.source}`} className="border-t border-[rgba(255,255,255,0.08)]">
-                  <td className="px-2 py-2 font-mono">{item.address.slice(0, 8)}...{item.address.slice(-6)}</td>
-                  <td className="px-2 py-2">{item.chain}</td>
-                  <td className="px-2 py-2">{item.source}</td>
-                  <td className="px-2 py-2">{item.confidence.toFixed(2)}</td>
-                  <td className="px-2 py-2">{item.tx_pattern_summary ?? "-"}</td>
-                  <td className="px-2 py-2">{item.customer_overlap_count}</td>
-                  <td className="px-2 py-2">{item.status}</td>
-                  <td className="px-2 py-2 space-x-1">
-                    <button className="rounded bg-emerald-600 px-2 py-1" onClick={() => review(item.address, item.chain, "approve")}>Approve</button>
-                    <button className="rounded bg-red-600 px-2 py-1" onClick={() => review(item.address, item.chain, "reject")}>Reject</button>
-                    <button className="rounded bg-amber-600 px-2 py-1" onClick={() => review(item.address, item.chain, "needs_more")}>Needs More</button>
+                <tr key={`${item.chain}:${item.address}:${item.source}`}>
+                  <td className="font-mono">
+                    {item.address.slice(0, 8)}...{item.address.slice(-6)}
+                  </td>
+                  <td>{item.chain}</td>
+                  <td>{item.source}</td>
+                  <td>{item.confidence.toFixed(2)}</td>
+                  <td>{item.tx_pattern_summary ?? "-"}</td>
+                  <td>{item.customer_overlap_count}</td>
+                  <td>{item.status}</td>
+                  <td>
+                    <div className="ui-btn-admin-row">
+                      <button
+                        type="button"
+                        className="ui-btn-admin ui-btn-admin--emerald"
+                        onClick={() => review(item.address, item.chain, "approve")}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        className="ui-btn-admin ui-btn-admin--red"
+                        onClick={() => review(item.address, item.chain, "reject")}
+                      >
+                        Reject
+                      </button>
+                      <button
+                        type="button"
+                        className="ui-btn-admin ui-btn-admin--amber"
+                        onClick={() => review(item.address, item.chain, "needs_more")}
+                      >
+                        Needs More
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))

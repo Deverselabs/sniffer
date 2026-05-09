@@ -18,12 +18,13 @@ function tierClass(color: "green" | "purple" | "blue" | "amber" | "red") {
   return "bg-red-500/15 text-red-300 border border-red-500/30";
 }
 
-function progressColor(score: number) {
-  if (score >= 90) return "bg-emerald-500";
-  if (score >= 70) return "bg-purple-500";
-  if (score >= 50) return "bg-blue-500";
-  if (score >= 30) return "bg-amber-500";
-  return "bg-red-500";
+function progressFillStyle(score: number): { width: string; background: string } {
+  const w = `${Math.min(100, Math.max(0, score))}%`;
+  if (score >= 90) return { width: w, background: "rgb(16, 185, 129)" };
+  if (score >= 70) return { width: w, background: "rgb(168, 85, 247)" };
+  if (score >= 50) return { width: w, background: "rgb(59, 130, 246)" };
+  if (score >= 30) return { width: w, background: "rgb(245, 158, 11)" };
+  return { width: w, background: "rgb(239, 68, 68)" };
 }
 
 export function WhaleRadar({ data, profile }: WhaleRadarProps) {
@@ -42,51 +43,44 @@ export function WhaleRadar({ data, profile }: WhaleRadarProps) {
   }));
 
   return (
-    <section className="rounded-lg border border-[rgba(127,119,221,0.2)] bg-[rgba(127,119,221,0.06)] p-4 sm:p-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <section className="ui-surface ui-card">
+      <div className="ui-cluster">
         <div>
-          <p className="font-mono text-xs font-medium uppercase tracking-[0.08em] text-[rgba(255,255,255,0.35)]">
+          <p className="ui-text-overline" style={{ color: "rgba(255,255,255,0.35)", letterSpacing: "0.08em" }}>
             {selectedProfile.emoji} {selectedProfile.label} - Whale Radar Score
           </p>
-          <p className="font-mono text-4xl font-bold tracking-tight text-white">{score.total}</p>
+          <p className="ui-title-xl ui-mt-tight">{score.total}</p>
         </div>
-        <span
-          className={`inline-flex w-fit rounded-full px-3 py-1 text-sm font-medium ${tierClass(score.tierColor)}`}
-        >
-          {score.tier}
-        </span>
+        <span className={`ui-pill ${tierClass(score.tierColor)}`}>{score.tier}</span>
       </div>
 
-      <div className="mt-4 h-2.5 w-full rounded-full bg-[rgba(255,255,255,0.06)]">
-        <div
-          className={`h-2.5 rounded-full transition-all ${progressColor(score.total)}`}
-          style={{ width: `${score.total}%` }}
-        />
+      <div className="ui-mt ui-progress-track">
+        <div className="ui-progress-fill" style={progressFillStyle(score.total)} />
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-[rgba(127,119,221,0.18)]">
-        <table className="w-full text-sm">
-          <thead className="bg-[rgba(255,255,255,0.03)] text-[rgba(255,255,255,0.45)]">
+      <div className="ui-mt ui-table-wrap-inner">
+        <table className="ui-table">
+          <thead>
             <tr>
-              <th className="px-3 py-2 text-left font-medium">Tier</th>
-              <th className="px-3 py-2 text-right font-medium">Points</th>
+              <th>Tier</th>
+              <th className="ui-text-right">Points</th>
             </tr>
           </thead>
           <tbody>
             {breakdown.map((row) => (
-              <tr key={row.id} className="border-t border-[rgba(127,119,221,0.12)]">
-                <td className="px-3 py-2 text-[rgba(255,255,255,0.7)]">
-                  <div className="flex flex-col gap-1">
+              <tr key={row.id}>
+                <td className="text-[rgba(255,255,255,0.7)]">
+                  <div className="ui-stack-tight">
                     <span>{row.label}</span>
-                    <div className="h-1.5 w-full rounded-full bg-[rgba(255,255,255,0.08)]">
+                    <div className="ui-progress-track">
                       <div
-                        className="h-1.5 rounded-full bg-indigo-400"
+                        className="ui-progress-fill"
                         style={{ width: `${Math.min(100, (row.points / row.max) * 100)}%` }}
                       />
                     </div>
                   </div>
                 </td>
-                <td className="px-3 py-2 text-right font-medium text-white">
+                <td className="ui-text-right font-medium text-white">
                   {row.points}/{row.max}
                 </td>
               </tr>
