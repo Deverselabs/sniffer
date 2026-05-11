@@ -8,7 +8,7 @@ import json
 import hmac
 import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Literal
+from typing import Any, Dict, List, Literal
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from app.db import get_conn
 from app.services.notify import notify
 from app.services.ethereum import eth_snapshot
+from app.services.lens_scoring import compute_all_lens_scores
 from app.services.scorer import score
 from app.services.solana import sol_balance, sol_deposits
 from app.services.tron import tron_balance, tron_deposits
@@ -32,6 +33,15 @@ class ScanRequest(BaseModel):
     chain: Literal["ethereum", "tron", "solana"] = "ethereum"
 
 
+class LensScoresRequest(BaseModel):
+    """Wallet snapshot fields used to score all industry lenses (matches frontend whale score)."""
+
+    balance_eth: float = 0.0
+    eth_price_usd: float | None = None
+    unique_senders: int = 0
+    incoming_tx: List[Dict[str, Any]] = Field(default_factory=list)
+
+
 class WebhookRequest(BaseModel):
     """Inbound webhook payload from casino/exchange deposit systems."""
 
@@ -40,6 +50,26 @@ class WebhookRequest(BaseModel):
     chain: Literal["ethereum", "tron", "solana"] = "ethereum"
     deposit_amount: float = Field(default=0, ge=0)
     tx_hash: str | None = None
+
+
+def _incoming_tx_for_lens_scores(rows: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    """Normalize client deposit rows to lens_scoring input (from, value_eth, timestamp)."""
+    out: list[Dict[str, Any]] = []
+    for tx in rows:
+        from_addr = str(tx.get("from", "")).lower()
+        ve = tx.get("valueEth")
+        if ve is None:
+            ve = tx.get("value_eth")
+        if ve is None:
+            ve = tx.get("value_native", 0)
+        out.append(
+            {
+                "from": from_addr,
+                "value_eth": float(ve or 0),
+                "timestamp": int(tx.get("timestamp", 0)),
+            }
+        )
+    return out
 
 
 def _normalize_for_score(address: str, deposits: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
@@ -100,11 +130,13 @@ async def scan_wallet(body: ScanRequest, background_tasks: BackgroundTasks) -> D
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"{chain} scan failed: {exc}") from exc
 
+    eth_price_usd = float(snapshot.get("price_usd", 0) or 0) if chain == "ethereum" else 0.0
     response_payload = {
         "address": address,
         "chain": chain,
         "balance": snapshot["balance"],
         "deposits": snapshot["deposits"],
+        "eth_price_usd": eth_price_usd,
         "score": scoring,
     }
     _persist_scan_result(address, chain, scoring, response_payload)
@@ -120,6 +152,30 @@ async def scan_wallet(body: ScanRequest, background_tasks: BackgroundTasks) -> D
             },
         )
     return response_payload
+
+
+@router.post(
+    "/lens-scores",
+    summary="All industry lens scores",
+    description=(
+        "Compute Whale Radar totals for every scoring lens from a wallet snapshot. "
+        "Runs off the event loop; intended to be called after /scan once deposits are loaded."
+    ),
+)
+async def lens_scores(body: LensScoresRequest) -> Dict[str, Any]:
+    txs = _incoming_tx_for_lens_scores(body.incoming_tx)
+    price = float(body.eth_price_usd or 0)
+
+    def work() -> list[Dict[str, Any]]:
+        return compute_all_lens_scores(
+            balance_eth=body.balance_eth,
+            eth_price_usd=price,
+            unique_senders=body.unique_senders,
+            incoming_tx=txs,
+        )
+
+    profiles = await asyncio.to_thread(work)
+    return {"profiles": profiles}
 
 
 def _persist_scan_result(address: str, chain: str, scoring: dict[str, Any], payload: dict[str, Any]) -> None:

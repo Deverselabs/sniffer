@@ -1,6 +1,6 @@
-import type { WalletData } from "../api";
+import type { IndustryProfile, WalletData } from "../api/types";
 
-export type IndustryProfile = "casino" | "risk" | "marketing" | "exchange" | "defi";
+export type { IndustryProfile };
 
 export interface ScoringWeights {
   t1WalletWealth: number;

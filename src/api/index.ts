@@ -1,10 +1,11 @@
 import axios from "axios";
-import type { Chain, Transaction, WalletData } from "./types";
+import type { Chain, IndustryProfile, LensScoreRow, Transaction, WalletData } from "./types";
 
 interface ScanApiResponse {
   address: string;
   chain: Chain;
   balance: number;
+  eth_price_usd?: number;
   deposits: Array<{
     hash: string;
     from: string;
@@ -38,15 +39,34 @@ export async function fetchWalletData(address: string, chain: Chain): Promise<Wa
     blockNumber: idx,
   }));
   const uniqueSenders = new Set(incomingTx.map((tx) => tx.from.toLowerCase())).size;
+  const ethPriceUsd =
+    typeof res.data.eth_price_usd === "number" && Number.isFinite(res.data.eth_price_usd)
+      ? res.data.eth_price_usd
+      : null;
   return {
     chain: res.data.chain,
     address: res.data.address,
     balanceEth: res.data.balance,
     balanceUsd: null,
-    ethPriceUsd: null,
+    ethPriceUsd,
     incomingTx,
     uniqueSenders,
   };
+}
+
+export async function fetchAllLensScores(data: WalletData): Promise<LensScoreRow[]> {
+  const incoming_tx = data.incomingTx.map((tx) => ({
+    from: tx.from,
+    valueEth: tx.valueEth,
+    timestamp: tx.timestamp,
+  }));
+  const res = await axios.post<{ profiles: LensScoreRow[] }>(`${API_BASE}/api/v1/lens-scores`, {
+    balance_eth: data.balanceEth,
+    eth_price_usd: data.ethPriceUsd ?? 0,
+    unique_senders: data.uniqueSenders,
+    incoming_tx,
+  });
+  return res.data.profiles;
 }
 
 export async function fetchRecentAlerts(): Promise<AlertsRecentResponse> {
@@ -54,4 +74,4 @@ export async function fetchRecentAlerts(): Promise<AlertsRecentResponse> {
   return res.data;
 }
 
-export type { Chain, WalletData, Transaction };
+export type { Chain, IndustryProfile, LensScoreRow, WalletData, Transaction };

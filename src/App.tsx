@@ -54,6 +54,10 @@ function App() {
   const activeData = view.level === "root" ? rootWallet.data : senderWallet.data;
   const activeLoading = view.level === "root" ? rootWallet.loading : senderWallet.loading;
   const activeError = view.level === "root" ? rootWallet.error : senderWallet.error;
+  const activeLensScores = view.level === "root" ? rootWallet.lensScores : senderWallet.lensScores;
+  const activeLensScoresLoading = view.level === "root" ? rootWallet.lensScoresLoading : senderWallet.lensScoresLoading;
+  const activeLensScoresError = view.level === "root" ? rootWallet.lensScoresError : senderWallet.lensScoresError;
+  const activeReloadLensScores = view.level === "root" ? rootWallet.reloadLensScores : senderWallet.reloadLensScores;
 
   function goBack() {
     setView({ level: "root" });
@@ -280,7 +284,16 @@ function App() {
               />
             ) : (
               <div className="ui-stack">
-                {activeData && <WhaleRadar data={activeData} profile={profile} />}
+                {activeData && (
+                  <WhaleRadar
+                    data={activeData}
+                    profile={profile}
+                    lensScores={activeLensScores}
+                    lensScoresLoading={activeLensScoresLoading}
+                    lensScoresError={activeLensScoresError}
+                    onRetryLensScores={activeReloadLensScores}
+                  />
+                )}
                 {activeData && <MetricsBar data={activeData} />}
                 {activeData && (
                   <TransactionList

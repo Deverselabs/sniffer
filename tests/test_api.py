@@ -125,6 +125,25 @@ async def test_health_endpoint():
 
 
 @pytest.mark.asyncio
+async def test_lens_scores_endpoint():
+    body = {
+        "balance_eth": 100.0,
+        "eth_price_usd": 3000.0,
+        "unique_senders": 1,
+        "incoming_tx": [
+            {"from": "0xabc", "valueEth": 20.0, "timestamp": 1700000000},
+        ],
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.post("/api/v1/lens-scores", json=body)
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data["profiles"]) == 5
+    for p in data["profiles"]:
+        assert 0 <= p["total"] <= 100
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("address,chain", TEST_WALLETS)
 async def test_scan_endpoint_score_ranges(address, chain):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

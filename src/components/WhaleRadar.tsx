@@ -1,4 +1,5 @@
-import type { WalletData } from "../api";
+import { useState } from "react";
+import type { LensScoreRow, WalletData } from "../api";
 import {
   computeWhaleScore,
   INDUSTRY_PROFILES,
@@ -8,6 +9,10 @@ import {
 interface WhaleRadarProps {
   data: WalletData;
   profile: IndustryProfile;
+  lensScores: LensScoreRow[] | null;
+  lensScoresLoading: boolean;
+  lensScoresError: string | null;
+  onRetryLensScores: () => void;
 }
 
 function tierClass(color: "green" | "purple" | "blue" | "amber" | "red") {
@@ -27,9 +32,20 @@ function progressFillStyle(score: number): { width: string; background: string }
   return { width: w, background: "rgb(239, 68, 68)" };
 }
 
-export function WhaleRadar({ data, profile }: WhaleRadarProps) {
+export function WhaleRadar({
+  data,
+  profile,
+  lensScores,
+  lensScoresLoading,
+  lensScoresError,
+  onRetryLensScores,
+}: WhaleRadarProps) {
+  const [showOtherLenses, setShowOtherLenses] = useState(false);
   const score = computeWhaleScore(data, profile);
   const selectedProfile = INDUSTRY_PROFILES[profile];
+
+  const otherLensRows = (lensScores ?? []).filter((row) => row.profile !== profile);
+
   const breakdown = score.tiers.map((tier) => ({
     ...tier,
     label:
@@ -58,36 +74,83 @@ export function WhaleRadar({ data, profile }: WhaleRadarProps) {
         <div className="ui-progress-fill" style={progressFillStyle(score.total)} />
       </div>
 
-      <div className="ui-mt ui-table-wrap-inner">
-        <table className="ui-table">
-          <thead>
-            <tr>
-              <th>Tier</th>
-              <th className="ui-text-right">Points</th>
-            </tr>
-          </thead>
-          <tbody>
-            {breakdown.map((row) => (
-              <tr key={row.id}>
-                <td className="text-[rgba(255,255,255,0.7)]">
-                  <div className="ui-stack-tight">
-                    <span>{row.label}</span>
-                    <div className="ui-progress-track">
-                      <div
-                        className="ui-progress-fill"
-                        style={{ width: `${Math.min(100, (row.points / row.max) * 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                </td>
-                <td className="ui-text-right font-medium text-white">
-                  {row.points}/{row.max}
-                </td>
-              </tr>
+      <button
+        type="button"
+        className="ui-btn ui-btn--ghost ui-lens-compare-btn"
+        onClick={() => setShowOtherLenses((v) => !v)}
+        aria-expanded={showOtherLenses}
+      >
+        {showOtherLenses ? "Hide other scoring lenses" : "Show scores for other scoring lenses"}
+      </button>
+
+      {showOtherLenses && (
+        <div className="ui-lens-grid" role="region" aria-label="Scores for other industry profiles">
+          {lensScoresLoading && (
+            <p className="ui-text-mono-muted" style={{ gridColumn: "1 / -1" }}>
+              Loading lens scores…
+            </p>
+          )}
+          {!lensScoresLoading && lensScoresError && (
+            <div className="ui-stack-tight" style={{ gridColumn: "1 / -1" }}>
+              <p className="ui-text-body text-[#ffb3b2]">{lensScoresError}</p>
+              <button type="button" className="ui-btn ui-btn--ghost" onClick={onRetryLensScores}>
+                Retry lens scores
+              </button>
+            </div>
+          )}
+          {!lensScoresLoading &&
+            !lensScoresError &&
+            otherLensRows.map((row) => (
+              <div key={row.profile} className="ui-lens-card">
+                <div className="ui-lens-card-title">
+                  {row.emoji} {row.label}
+                </div>
+                <div className="ui-lens-card-score">{row.total}</div>
+              </div>
             ))}
-          </tbody>
-        </table>
-      </div>
+        </div>
+      )}
+
+      <details className="ui-collapsible">
+        <summary>
+          <span>Score breakdown — {selectedProfile.label}</span>
+          <span aria-hidden style={{ color: "rgba(127,119,221,0.45)" }}>
+            ▾
+          </span>
+        </summary>
+        <div className="ui-collapsible-body">
+          <div className="ui-table-wrap-inner">
+            <table className="ui-table">
+              <thead>
+                <tr>
+                  <th>Tier</th>
+                  <th className="ui-text-right">Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {breakdown.map((row) => (
+                  <tr key={row.id}>
+                    <td className="text-[rgba(255,255,255,0.7)]">
+                      <div className="ui-stack-tight">
+                        <span>{row.label}</span>
+                        <div className="ui-progress-track">
+                          <div
+                            className="ui-progress-fill"
+                            style={{ width: `${Math.min(100, (row.points / row.max) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="ui-text-right font-medium text-white">
+                      {row.points}/{row.max}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
     </section>
   );
 }

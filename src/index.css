@@ -839,6 +839,76 @@ body {
   text-align: right;
 }
 
+.ui-lens-compare-btn {
+  margin-top: 0.85em;
+  align-self: flex-start;
+}
+
+.ui-lens-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11em, 1fr));
+  gap: 0.65em;
+  margin-top: 0.75em;
+}
+
+.ui-lens-card {
+  border-radius: var(--ui-radius);
+  border: var(--ui-border) rgba(127, 119, 221, 0.22);
+  background: rgba(127, 119, 221, 0.06);
+  padding: 0.65em 0.85em;
+}
+
+.ui-lens-card-title {
+  font-family: "Courier New", monospace;
+  font-size: 68.75%;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.06em;
+}
+
+.ui-lens-card-score {
+  margin-top: 0.25em;
+  font-family: "Courier New", monospace;
+  font-size: 150%;
+  font-weight: 700;
+  color: #fff;
+}
+
+.ui-collapsible {
+  margin-top: 1em;
+  border-radius: var(--ui-radius);
+  border: var(--ui-border) rgba(127, 119, 221, 0.18);
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.ui-collapsible > summary {
+  cursor: pointer;
+  padding: 0.65em 0.85em;
+  font-family: "Courier New", monospace;
+  font-size: 75%;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  list-style: none;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5em;
+}
+
+.ui-collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ui-collapsible[open] > summary {
+  border-bottom: var(--ui-border) rgba(127, 119, 221, 0.12);
+}
+
+.ui-collapsible-body {
+  padding: 0.65em 0.5em 0.85em;
+}
+
 .ui-dropzone {
   cursor: pointer;
   border-radius: var(--ui-radius-lg);

@@ -81,46 +81,58 @@ export function TransactionList({
 
   return (
     <section className="ui-stack ui-surface">
-      <div className="ui-cluster items-start">
-        <p className="ui-text-body text-[rgba(255,255,255,0.35)]">
-          Showing {visibleTransactions.length} of {transactions.length} deposits
-        </p>
-        <div className="ui-row">
-          <button type="button" className="ui-btn ui-btn--outline" onClick={handleExportDeposits}>
-            Export deposits
-          </button>
-          <select
-            value={sortMode}
-            onChange={(e) => setSortMode(e.target.value as SortMode)}
-            className="ui-select"
-          >
-            <option value="recent">Most recent</option>
-            <option value="amount">Highest amount</option>
-          </select>
+      <details className="ui-collapsible" style={{ marginTop: 0 }}>
+        <summary>
+          <span>Deposit details — {transactions.length} incoming</span>
+          <span aria-hidden style={{ color: "rgba(127,119,221,0.45)" }}>
+            ▾
+          </span>
+        </summary>
+        <div className="ui-collapsible-body">
+          <div className="ui-stack ui-stack-tight">
+            <div className="ui-cluster items-start">
+              <p className="ui-text-body text-[rgba(255,255,255,0.35)]">
+                Showing {visibleTransactions.length} of {transactions.length} deposits
+              </p>
+              <div className="ui-row">
+                <button type="button" className="ui-btn ui-btn--outline" onClick={handleExportDeposits}>
+                  Export deposits
+                </button>
+                <select
+                  value={sortMode}
+                  onChange={(e) => setSortMode(e.target.value as SortMode)}
+                  className="ui-select"
+                >
+                  <option value="recent">Most recent</option>
+                  <option value="amount">Highest amount</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="ui-stack-tight">
+              {visibleTransactions.map((tx) => (
+                <TransactionCard
+                  key={tx.hash}
+                  tx={tx}
+                  chain={chain}
+                  onAddressClick={onAddressClick}
+                  whaleScore={undefined}
+                />
+              ))}
+            </div>
+
+            {visibleCount < sortedTransactions.length && (
+              <button
+                type="button"
+                className="ui-btn ui-btn--outline w-full"
+                onClick={() => setVisibleCount((prev) => prev + 10)}
+              >
+                Load more
+              </button>
+            )}
+          </div>
         </div>
-      </div>
-
-      <div className="ui-stack-tight">
-        {visibleTransactions.map((tx) => (
-          <TransactionCard
-            key={tx.hash}
-            tx={tx}
-            chain={chain}
-            onAddressClick={onAddressClick}
-            whaleScore={undefined}
-          />
-        ))}
-      </div>
-
-      {visibleCount < sortedTransactions.length && (
-        <button
-          type="button"
-          className="ui-btn ui-btn--outline w-full"
-          onClick={() => setVisibleCount((prev) => prev + 10)}
-        >
-          Load more
-        </button>
-      )}
+      </details>
     </section>
   );
 }
