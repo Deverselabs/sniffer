@@ -237,9 +237,12 @@ async def test_whale_network_endpoints(monkeypatch):
                 "job_id": self.job_id,
                 "root_address": "0xd8da6bf26964af9d7eed9e03e53415d37aa96045",
                 "chain": "ethereum",
+                "tx_window_days": 30,
+                "telegram_notifications": False,
                 "status": self.status,
                 "progress": "ok",
                 "processed_wallets": 1,
+                "skipped_wallets": 0,
                 "queued_wallets": 0,
                 "scanned_levels": 1,
                 "whale_found": False,
@@ -252,7 +255,7 @@ async def test_whale_network_endpoints(monkeypatch):
                 "completed_at": None,
             }
 
-    async def fake_start(address: str, chain: str):
+    async def fake_start(address: str, chain: str, **kwargs: object):
         return FakeJob("job_123", "running")
 
     async def fake_get(job_id: str):

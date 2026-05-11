@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchRecentAlerts } from "./api";
-import type { Chain, WalletData } from "./api";
+import type { Chain, WalletData, WhaleNetworkStartOptions } from "./api";
 import { BulkUpload } from "./components/BulkUpload";
 import DogLogo from "./components/DogLogo";
 import { MetricsBar } from "./components/MetricsBar";
@@ -22,6 +22,8 @@ function App() {
   const [chain, setChain] = useState<Chain>("ethereum");
   const [address, setAddress] = useState("");
   const [toasts, setToasts] = useState<Array<{ id: string; text: string }>>([]);
+  const [whaleTxWindowDays, setWhaleTxWindowDays] = useState<number | null>(30);
+  const [whaleTelegramForScan, setWhaleTelegramForScan] = useState("");
   const rootWallet = useWalletData();
   const senderWallet = useWalletData();
   const whaleNetwork = useWhaleNetworkScan();
@@ -69,12 +71,29 @@ function App() {
   const activeReloadLensScores = view.level === "root" ? rootWallet.reloadLensScores : senderWallet.reloadLensScores;
 
   useEffect(() => {
+    if (activeData) {
+      setWhaleTelegramForScan("");
+      setWhaleTxWindowDays(30);
+    }
+  }, [activeData?.address, activeData?.chain]);
+
+  useEffect(() => {
     if (!activeData || mode !== "single") {
       void cancelWhaleNetworkScan();
       return;
     }
-    void startWhaleNetworkScan(activeData.address, activeData.chain);
-  }, [activeData, mode, startWhaleNetworkScan, cancelWhaleNetworkScan]);
+    const opts: WhaleNetworkStartOptions = { tx_window_days: whaleTxWindowDays };
+    const tg = whaleTelegramForScan.trim();
+    if (tg) opts.telegram_chat_id = tg;
+    void startWhaleNetworkScan(activeData.address, activeData.chain, opts);
+  }, [
+    activeData,
+    mode,
+    whaleTxWindowDays,
+    whaleTelegramForScan,
+    startWhaleNetworkScan,
+    cancelWhaleNetworkScan,
+  ]);
 
   function goBack() {
     setView({ level: "root" });
@@ -309,6 +328,10 @@ function App() {
                     lensScoresLoading={activeLensScoresLoading}
                     lensScoresError={activeLensScoresError}
                     onRetryLensScores={activeReloadLensScores}
+                    whaleTxWindowDays={whaleTxWindowDays}
+                    onWhaleTxWindowDaysChange={setWhaleTxWindowDays}
+                    whaleTelegramForScan={whaleTelegramForScan}
+                    onApplyWhaleTelegram={(trimmed) => setWhaleTelegramForScan(trimmed)}
                     whaleNetworkJob={whaleNetworkJob}
                     whaleNetworkLoading={whaleNetworkLoading}
                     whaleNetworkError={whaleNetworkError}

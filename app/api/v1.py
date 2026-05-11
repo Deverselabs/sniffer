@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Literal
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.db import get_conn
 from app.services.notify import notify
@@ -50,6 +50,32 @@ class LensScoresRequest(BaseModel):
 class WhaleNetworkStartRequest(BaseModel):
     address: str = Field(..., min_length=2)
     chain: Literal["ethereum", "tron", "solana"] = "ethereum"
+    tx_window_days: int | None = Field(
+        default=30,
+        description="Neighbor discovery window in days; null = full history (per-wallet caps still apply).",
+    )
+    telegram_chat_id: str | None = Field(
+        default=None,
+        max_length=80,
+        description="Telegram chat or channel id for progress and result messages (requires TELEGRAM_BOT_TOKEN).",
+    )
+
+    @field_validator("tx_window_days")
+    @classmethod
+    def validate_tx_window(cls, v: int | None) -> int | None:
+        if v is None:
+            return None
+        if v < 1 or v > 3650:
+            raise ValueError("tx_window_days must be null or between 1 and 3650")
+        return v
+
+    @field_validator("telegram_chat_id", mode="before")
+    @classmethod
+    def normalize_telegram(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s or None
 
 
 class WebhookRequest(BaseModel):
@@ -192,8 +218,9 @@ async def lens_scores(body: LensScoresRequest) -> Dict[str, Any]:
     "/whale-network/start",
     summary="Start whale network scan job",
     description=(
-        "Start background BFS scan up to 4 levels over 30-day transaction neighbors. "
-        "Returns a job id for status polling."
+        "Start background BFS scan up to 4 levels. Neighbors come from counterparties in recent "
+        "transactions (tx_window_days, or full history when null). Optional telegram_chat_id sends "
+        "updates when TELEGRAM_BOT_TOKEN is set."
     ),
 )
 async def whale_network_start(body: WhaleNetworkStartRequest) -> Dict[str, Any]:
@@ -201,7 +228,12 @@ async def whale_network_start(body: WhaleNetworkStartRequest) -> Dict[str, Any]:
     chain = body.chain
     if not validate_address(chain, address):
         raise HTTPException(status_code=400, detail=f"Invalid {chain} address format")
-    job = await start_whale_network_job(address, chain)
+    job = await start_whale_network_job(
+        address,
+        chain,
+        tx_window_days=body.tx_window_days,
+        telegram_chat_id=body.telegram_chat_id,
+    )
     return job.to_payload()
 
 

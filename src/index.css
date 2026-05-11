@@ -873,73 +873,94 @@ body {
   color: #fff;
 }
 
-.ui-whale-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 1em;
-}
-
-.ui-whale-card-primary {
+.ui-whale-radar-panel {
   border-radius: var(--ui-radius-lg);
-  border: 0.09em solid rgba(127, 119, 221, 0.52);
+  border: var(--ui-border) rgba(127, 119, 221, 0.24);
   background: linear-gradient(
     155deg,
-    rgba(127, 119, 221, 0.2) 0%,
-    rgba(127, 119, 221, 0.07) 42%,
-    rgba(5, 5, 12, 0.55) 100%
+    rgba(127, 119, 221, 0.16) 0%,
+    rgba(127, 119, 221, 0.06) 38%,
+    rgba(5, 5, 12, 0.45) 100%
   );
   box-shadow:
-    inset 0 0.06em 0 rgba(255, 255, 255, 0.07),
-    0 0 1.25em rgba(127, 119, 221, 0.14);
-  padding: 1.05em 1.15em 1.15em;
+    inset 0 0.06em 0 rgba(255, 255, 255, 0.06),
+    0 0 1.25em rgba(127, 119, 221, 0.12);
+  padding: 0;
+  overflow: hidden;
 }
 
-.ui-whale-card-compare {
-  border-radius: var(--ui-radius-lg);
-  border: 0.11em dashed rgba(93, 202, 165, 0.42);
-  background: rgba(93, 202, 165, 0.06);
-  box-shadow: inset 0 0 0 0.06em rgba(93, 202, 165, 0.1);
-  padding: 0.75em 1em 1em;
+.ui-whale-radar-panel-inner {
+  display: flex;
+  flex-direction: column;
 }
 
-.ui-whale-compare-heading {
+.ui-whale-panel-section {
+  padding: 1.05em 1.15em 1.1em;
+}
+
+.ui-whale-panel-section + .ui-whale-panel-section {
+  border-top: var(--ui-border) rgba(127, 119, 221, 0.14);
+}
+
+.ui-whale-compare-heading,
+.ui-whale-network-heading {
   font-family: "Courier New", monospace;
   font-size: 62.5%;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(93, 202, 165, 0.55);
+  color: rgba(183, 176, 255, 0.65);
   margin-bottom: 0.5em;
 }
 
-.ui-whale-card-compare .ui-lens-compare-btn {
+.ui-whale-network-options select,
+.ui-whale-network-options input[type="text"] {
+  width: 100%;
+  max-width: 22rem;
+  border-radius: var(--ui-radius);
+  border: var(--ui-border) rgba(127, 119, 221, 0.25);
+  background: rgba(5, 5, 12, 0.45);
+  padding: 0.55em 0.75em;
+  font-family: "Courier New", monospace;
+  font-size: 81.25%;
+  color: rgba(255, 255, 255, 0.88);
+  outline: none;
+}
+
+.ui-whale-network-options select option {
+  background: #12101f;
+  color: #fff;
+}
+
+.ui-whale-radar-panel .ui-lens-compare-btn {
   margin-top: 0;
 }
 
-.ui-whale-card-compare .ui-lens-grid {
+.ui-whale-radar-panel .ui-lens-grid {
   margin-top: 0.65em;
 }
 
-.ui-whale-card-compare .ui-lens-card {
-  border-color: rgba(93, 202, 165, 0.28);
-  background: rgba(5, 8, 10, 0.35);
+.ui-whale-radar-panel .ui-lens-card {
+  border-color: rgba(127, 119, 221, 0.22);
+  background: rgba(5, 5, 12, 0.35);
 }
 
 .ui-whale-breakdown {
   margin-top: 0;
-  border-radius: var(--ui-radius-lg);
-  border: 0.09em solid rgba(251, 191, 36, 0.38);
-  background: rgba(251, 191, 36, 0.05);
+  border: none;
+  border-radius: 0;
+  background: transparent;
   overflow: hidden;
-  box-shadow: inset 0 0 0 0.06em rgba(251, 191, 36, 0.08);
+  box-shadow: none;
 }
 
 .ui-whale-breakdown > summary {
   cursor: pointer;
-  padding: 0.7em 0.95em;
+  padding: 0.55em 0;
+  margin: -0.15em 0 0;
   font-family: "Courier New", monospace;
   font-size: 75%;
-  color: rgba(253, 224, 139, 0.88);
+  color: rgba(210, 204, 255, 0.82);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   list-style: none;
@@ -948,7 +969,11 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.5em;
-  background: rgba(251, 191, 36, 0.04);
+  background: transparent;
+}
+
+.ui-whale-breakdown-chevron {
+  color: rgba(183, 176, 255, 0.5);
 }
 
 .ui-whale-breakdown > summary::-webkit-details-marker {
@@ -956,30 +981,14 @@ body {
 }
 
 .ui-whale-breakdown[open] > summary {
-  border-bottom: var(--ui-border) rgba(251, 191, 36, 0.22);
-  background: rgba(251, 191, 36, 0.08);
+  border-bottom: var(--ui-border) rgba(127, 119, 221, 0.16);
+  padding-bottom: 0.65em;
+  margin-bottom: 0.35em;
 }
 
 .ui-whale-breakdown-body {
-  padding: 0.65em 0.5em 0.85em;
-  background: rgba(5, 5, 8, 0.25);
-}
-
-.ui-whale-network-card {
-  border-radius: var(--ui-radius-lg);
-  border: 0.09em solid rgba(96, 165, 250, 0.4);
-  background: rgba(59, 130, 246, 0.07);
-  padding: 0.75em 1em;
-}
-
-.ui-whale-network-heading {
-  font-family: "Courier New", monospace;
-  font-size: 62.5%;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(147, 197, 253, 0.78);
-  margin-bottom: 0.5em;
+  padding: 0.15em 0 0.35em;
+  background: transparent;
 }
 
 .ui-collapsible {

@@ -22,13 +22,27 @@ async def _send_slack(payload: dict[str, Any]) -> None:
     await _post_json(webhook, payload)
 
 
-async def _send_telegram(text: str) -> None:
+async def send_telegram_text(text: str, *, chat_id: str | None = None) -> bool:
+    """
+    Send a Telegram message using TELEGRAM_BOT_TOKEN.
+    If chat_id is omitted, uses TELEGRAM_CHAT_ID (legacy whale / alert routing).
+    """
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
-    if not bot_token or not chat_id:
-        return
+    cid = (chat_id or "").strip() or os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    if not bot_token or not cid:
+        return False
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    await _post_json(url, {"chat_id": chat_id, "text": text})
+    safe = text[:4090] if len(text) > 4090 else text
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(url, json={"chat_id": cid, "text": safe})
+        return response.status_code == 200
+    except (httpx.RequestError, ValueError):
+        return False
+
+
+async def _send_telegram(text: str) -> None:
+    await send_telegram_text(text, chat_id=None)
 
 
 def _queue_digest(payload: dict[str, Any]) -> None:

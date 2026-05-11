@@ -7,6 +7,7 @@ import type {
   WalletData,
   WhaleNetworkJob,
   WhaleNetworkJobStatus,
+  WhaleNetworkStartOptions,
 } from "./types";
 
 interface ScanApiResponse {
@@ -82,8 +83,19 @@ export async function fetchRecentAlerts(): Promise<AlertsRecentResponse> {
   return res.data;
 }
 
-export async function startWhaleNetworkScan(address: string, chain: Chain): Promise<WhaleNetworkJob> {
-  const res = await axios.post<WhaleNetworkJob>(`${API_BASE}/api/v1/whale-network/start`, { address, chain });
+export async function startWhaleNetworkScan(
+  address: string,
+  chain: Chain,
+  options?: WhaleNetworkStartOptions | null
+): Promise<WhaleNetworkJob> {
+  const body: Record<string, unknown> = { address, chain };
+  if (options?.tx_window_days !== undefined) {
+    body.tx_window_days = options.tx_window_days;
+  }
+  if (options?.telegram_chat_id) {
+    body.telegram_chat_id = options.telegram_chat_id;
+  }
+  const res = await axios.post<WhaleNetworkJob>(`${API_BASE}/api/v1/whale-network/start`, body);
   return res.data;
 }
 
@@ -105,4 +117,5 @@ export type {
   Transaction,
   WhaleNetworkJob,
   WhaleNetworkJobStatus,
+  WhaleNetworkStartOptions,
 };

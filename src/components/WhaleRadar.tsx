@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { LensScoreRow, WalletData } from "../api";
+import { useEffect, useState } from "react";
+import type { LensScoreRow, WalletData, WhaleNetworkJob } from "../api";
 import {
   computeWhaleScore,
   INDUSTRY_PROFILES,
@@ -13,17 +13,11 @@ interface WhaleRadarProps {
   lensScoresLoading: boolean;
   lensScoresError: string | null;
   onRetryLensScores: () => void;
-  whaleNetworkJob: {
-    status: string;
-    progress: string;
-    processed_wallets: number;
-    queued_wallets: number;
-    scanned_levels: number;
-    whale_found: boolean;
-    whale_wallet: string | null;
-    whale_score: number | null;
-    whale_level: number | null;
-  } | null;
+  whaleTxWindowDays: number | null;
+  onWhaleTxWindowDaysChange: (days: number | null) => void;
+  whaleTelegramForScan: string;
+  onApplyWhaleTelegram: (trimmed: string) => void;
+  whaleNetworkJob: WhaleNetworkJob | null;
   whaleNetworkLoading: boolean;
   whaleNetworkError: string | null;
   onCancelWhaleNetworkScan: () => void;
@@ -53,12 +47,22 @@ export function WhaleRadar({
   lensScoresLoading,
   lensScoresError,
   onRetryLensScores,
+  whaleTxWindowDays,
+  onWhaleTxWindowDaysChange,
+  whaleTelegramForScan,
+  onApplyWhaleTelegram,
   whaleNetworkJob,
   whaleNetworkLoading,
   whaleNetworkError,
   onCancelWhaleNetworkScan,
 }: WhaleRadarProps) {
   const [showOtherLenses, setShowOtherLenses] = useState(false);
+  const [tgDraft, setTgDraft] = useState(whaleTelegramForScan);
+
+  useEffect(() => {
+    setTgDraft(whaleTelegramForScan);
+  }, [whaleTelegramForScan, data.address, data.chain]);
+
   const score = computeWhaleScore(data, profile);
   const selectedProfile = INDUSTRY_PROFILES[profile];
 
@@ -77,8 +81,9 @@ export function WhaleRadar({
   }));
 
   return (
-    <div className="ui-surface ui-whale-stack">
-      <article className="ui-whale-card-primary" aria-label="Whale Radar score for selected lens">
+    <div className="ui-surface ui-card ui-whale-radar-panel" aria-label="Whale Radar">
+      <div className="ui-whale-radar-panel-inner">
+      <article className="ui-whale-panel-section" aria-label="Whale Radar score for selected lens">
         <div className="ui-cluster">
           <div>
             <p className="ui-text-overline" style={{ color: "rgba(255,255,255,0.35)", letterSpacing: "0.08em" }}>
@@ -94,7 +99,7 @@ export function WhaleRadar({
         </div>
       </article>
 
-      <section className="ui-whale-card-compare" aria-label="Compare scores across other industry lenses">
+      <section className="ui-whale-panel-section" aria-label="Compare scores across other industry lenses">
         <p className="ui-whale-compare-heading">Other scoring lenses</p>
         <button
           type="button"
@@ -134,10 +139,10 @@ export function WhaleRadar({
         )}
       </section>
 
-      <details className="ui-whale-breakdown">
+      <details className="ui-whale-panel-section ui-whale-breakdown">
         <summary>
           <span>Score breakdown — {selectedProfile.label}</span>
-          <span aria-hidden style={{ color: "rgba(251, 191, 36, 0.55)" }}>
+          <span aria-hidden className="ui-whale-breakdown-chevron">
             ▾
           </span>
         </summary>
@@ -175,18 +180,79 @@ export function WhaleRadar({
         </div>
       </details>
 
-      <section className="ui-whale-network-card" aria-live="polite">
-        <p className="ui-whale-network-heading">Whale network scan (4-level graph)</p>
-        {whaleNetworkError && <p className="ui-text-body text-[#ffb3b2]">{whaleNetworkError}</p>}
+      <section className="ui-whale-panel-section" aria-live="polite">
+        <p className="ui-whale-network-heading">Whale network scan (4 levels)</p>
+        <p className="ui-text-caption" style={{ marginBottom: "0.65em" }}>
+          Each round scores the wallet, then expands to distinct counterparties from incoming/outgoing activity in the
+          selected time window (capped per wallet). Repeats up to four rounds.
+        </p>
+        <div className="ui-whale-network-options ui-stack-tight">
+          <label className="ui-text-overline" style={{ color: "rgba(183,176,255,0.55)" }}>
+            Neighbor transaction window
+          </label>
+          <select
+            value={whaleTxWindowDays === null ? "full" : String(whaleTxWindowDays)}
+            onChange={(e) => {
+              const v = e.target.value;
+              onWhaleTxWindowDaysChange(v === "full" ? null : Number(v));
+            }}
+            aria-label="Transaction window for neighbor discovery"
+          >
+            <option value="15">Last 15 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="full">Full history (slower, still capped)</option>
+          </select>
+          <label className="ui-text-overline ui-mt-tight" style={{ color: "rgba(183,176,255,0.55)" }}>
+            Telegram chat or channel id
+          </label>
+          <input
+            type="text"
+            placeholder="-1001234567890 or @channelusername"
+            value={tgDraft}
+            onChange={(e) => setTgDraft(e.target.value)}
+            aria-label="Telegram destination for scan updates"
+            autoComplete="off"
+          />
+          <p className="ui-text-caption">
+            Set <code className="text-[rgba(200,190,255,0.85)]">TELEGRAM_BOT_TOKEN</code> on the server. Add the bot to
+            your channel as admin, then paste the channel id here. Use &quot;Apply Telegram&quot; to restart the job
+            with this destination.
+          </p>
+          <div className="ui-cluster" style={{ flexWrap: "wrap", gap: "0.5em" }}>
+            <button type="button" className="ui-btn ui-btn--ghost" onClick={() => onApplyWhaleTelegram(tgDraft.trim())}>
+              Apply Telegram &amp; restart scan
+            </button>
+          </div>
+        </div>
+        {whaleNetworkError && <p className="ui-text-body text-[#ffb3b2] ui-mt">{whaleNetworkError}</p>}
         {!whaleNetworkError && whaleNetworkJob && (
-          <div className="ui-stack-tight">
+          <div className="ui-stack-tight ui-mt">
+            <p className="ui-text-caption">
+              Job window:{" "}
+              <span className="text-white">
+                {whaleNetworkJob.tx_window_days === null
+                  ? "full"
+                  : `${whaleNetworkJob.tx_window_days ?? 30}d`}
+              </span>
+              {whaleNetworkJob.telegram_notifications ? (
+                <span> · Telegram updates on</span>
+              ) : (
+                <span> · Telegram updates off</span>
+              )}
+            </p>
             <p className="ui-text-body text-[rgba(255,255,255,0.6)]">
               Status: <span className="text-white">{whaleNetworkJob.status}</span> — {whaleNetworkJob.progress}
             </p>
             <p className="ui-text-caption">
-              Processed {whaleNetworkJob.processed_wallets} wallet(s), queued {whaleNetworkJob.queued_wallets}, depth{" "}
-              {Math.min(4, whaleNetworkJob.scanned_levels + 1)}/4
+              Processed {whaleNetworkJob.processed_wallets} wallet(s)
+              {(whaleNetworkJob.skipped_wallets ?? 0) > 0 ? (
+                <span>, skipped {whaleNetworkJob.skipped_wallets} (upstream errors)</span>
+              ) : null}
+              , queued {whaleNetworkJob.queued_wallets}, depth {Math.min(4, whaleNetworkJob.scanned_levels + 1)}/4
             </p>
+            {whaleNetworkJob.error && whaleNetworkJob.status === "failed" && (
+              <p className="ui-text-body text-[#ffb3b2]">Error: {whaleNetworkJob.error}</p>
+            )}
             {whaleNetworkJob.whale_found ? (
               <p className="ui-text-body text-[#5DCAA5]">
                 Whale network detected via wallet {whaleNetworkJob.whale_wallet} (score {whaleNetworkJob.whale_score},
@@ -205,9 +271,10 @@ export function WhaleRadar({
           </div>
         )}
         {!whaleNetworkError && !whaleNetworkJob && (
-          <p className="ui-text-caption">Preparing whale network scan…</p>
+          <p className="ui-text-caption ui-mt">Preparing whale network scan…</p>
         )}
       </section>
+      </div>
     </div>
   );
 }
