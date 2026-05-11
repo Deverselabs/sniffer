@@ -1,5 +1,13 @@
 import axios from "axios";
-import type { Chain, IndustryProfile, LensScoreRow, Transaction, WalletData } from "./types";
+import type {
+  Chain,
+  IndustryProfile,
+  LensScoreRow,
+  Transaction,
+  WalletData,
+  WhaleNetworkJob,
+  WhaleNetworkJobStatus,
+} from "./types";
 
 interface ScanApiResponse {
   address: string;
@@ -74,4 +82,27 @@ export async function fetchRecentAlerts(): Promise<AlertsRecentResponse> {
   return res.data;
 }
 
-export type { Chain, IndustryProfile, LensScoreRow, WalletData, Transaction };
+export async function startWhaleNetworkScan(address: string, chain: Chain): Promise<WhaleNetworkJob> {
+  const res = await axios.post<WhaleNetworkJob>(`${API_BASE}/api/v1/whale-network/start`, { address, chain });
+  return res.data;
+}
+
+export async function fetchWhaleNetworkStatus(jobId: string): Promise<WhaleNetworkJob> {
+  const res = await axios.get<WhaleNetworkJob>(`${API_BASE}/api/v1/whale-network/${jobId}`);
+  return res.data;
+}
+
+export async function cancelWhaleNetworkScan(jobId: string): Promise<WhaleNetworkJob> {
+  const res = await axios.post<WhaleNetworkJob>(`${API_BASE}/api/v1/whale-network/${jobId}/cancel`);
+  return res.data;
+}
+
+export type {
+  Chain,
+  IndustryProfile,
+  LensScoreRow,
+  WalletData,
+  Transaction,
+  WhaleNetworkJob,
+  WhaleNetworkJobStatus,
+};

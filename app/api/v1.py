@@ -18,6 +18,11 @@ from app.services.notify import notify
 from app.services.ethereum import eth_snapshot
 from app.services.lens_scoring import compute_all_lens_scores
 from app.services.scorer import score
+from app.services.whale_network import (
+    cancel_whale_network_job,
+    get_whale_network_job,
+    start_whale_network_job,
+)
 from app.services.solana import sol_balance, sol_deposits
 from app.services.tron import tron_balance, tron_deposits
 from app.utils.validators import validate_address
@@ -40,6 +45,11 @@ class LensScoresRequest(BaseModel):
     eth_price_usd: float | None = None
     unique_senders: int = 0
     incoming_tx: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class WhaleNetworkStartRequest(BaseModel):
+    address: str = Field(..., min_length=2)
+    chain: Literal["ethereum", "tron", "solana"] = "ethereum"
 
 
 class WebhookRequest(BaseModel):
@@ -176,6 +186,45 @@ async def lens_scores(body: LensScoresRequest) -> Dict[str, Any]:
 
     profiles = await asyncio.to_thread(work)
     return {"profiles": profiles}
+
+
+@router.post(
+    "/whale-network/start",
+    summary="Start whale network scan job",
+    description=(
+        "Start background BFS scan up to 4 levels over 30-day transaction neighbors. "
+        "Returns a job id for status polling."
+    ),
+)
+async def whale_network_start(body: WhaleNetworkStartRequest) -> Dict[str, Any]:
+    address = body.address.strip()
+    chain = body.chain
+    if not validate_address(chain, address):
+        raise HTTPException(status_code=400, detail=f"Invalid {chain} address format")
+    job = await start_whale_network_job(address, chain)
+    return job.to_payload()
+
+
+@router.get(
+    "/whale-network/{job_id}",
+    summary="Get whale network scan job status",
+)
+async def whale_network_status(job_id: str) -> Dict[str, Any]:
+    job = await get_whale_network_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="whale network job not found")
+    return job.to_payload()
+
+
+@router.post(
+    "/whale-network/{job_id}/cancel",
+    summary="Cancel whale network scan job",
+)
+async def whale_network_cancel(job_id: str) -> Dict[str, Any]:
+    job = await cancel_whale_network_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="whale network job not found")
+    return job.to_payload()
 
 
 def _persist_scan_result(address: str, chain: str, scoring: dict[str, Any], payload: dict[str, Any]) -> None:

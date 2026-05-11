@@ -6,6 +6,7 @@ import DogLogo from "./components/DogLogo";
 import { MetricsBar } from "./components/MetricsBar";
 import { TransactionList } from "./components/TransactionList";
 import { WhaleRadar } from "./components/WhaleRadar";
+import { useWhaleNetworkScan } from "./hooks/useWhaleNetworkScan";
 import { useWalletData } from "./hooks/useWalletData";
 import { detectChain, isValidAddressForChain } from "./utils/address";
 import { INDUSTRY_PROFILES, type IndustryProfile } from "./utils/whaleScore";
@@ -23,6 +24,14 @@ function App() {
   const [toasts, setToasts] = useState<Array<{ id: string; text: string }>>([]);
   const rootWallet = useWalletData();
   const senderWallet = useWalletData();
+  const whaleNetwork = useWhaleNetworkScan();
+  const {
+    job: whaleNetworkJob,
+    loading: whaleNetworkLoading,
+    error: whaleNetworkError,
+    start: startWhaleNetworkScan,
+    cancel: cancelWhaleNetworkScan,
+  } = whaleNetwork;
 
   const CHAINS = [
     { id: "ethereum", label: "ETH", color: "#627EEA", soon: false },
@@ -58,6 +67,14 @@ function App() {
   const activeLensScoresLoading = view.level === "root" ? rootWallet.lensScoresLoading : senderWallet.lensScoresLoading;
   const activeLensScoresError = view.level === "root" ? rootWallet.lensScoresError : senderWallet.lensScoresError;
   const activeReloadLensScores = view.level === "root" ? rootWallet.reloadLensScores : senderWallet.reloadLensScores;
+
+  useEffect(() => {
+    if (!activeData || mode !== "single") {
+      void cancelWhaleNetworkScan();
+      return;
+    }
+    void startWhaleNetworkScan(activeData.address, activeData.chain);
+  }, [activeData, mode, startWhaleNetworkScan, cancelWhaleNetworkScan]);
 
   function goBack() {
     setView({ level: "root" });
@@ -292,6 +309,10 @@ function App() {
                     lensScoresLoading={activeLensScoresLoading}
                     lensScoresError={activeLensScoresError}
                     onRetryLensScores={activeReloadLensScores}
+                    whaleNetworkJob={whaleNetworkJob}
+                    whaleNetworkLoading={whaleNetworkLoading}
+                    whaleNetworkError={whaleNetworkError}
+                    onCancelWhaleNetworkScan={cancelWhaleNetworkScan}
                   />
                 )}
                 {activeData && <MetricsBar data={activeData} />}

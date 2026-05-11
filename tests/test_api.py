@@ -221,3 +221,62 @@ async def test_admin_jobs_run_endpoint():
         admin.arkham_sync = fake_job
         res = await client.post("/api/admin/jobs/run", headers={"x-admin-secret": "admin-secret"})
     assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_whale_network_endpoints(monkeypatch):
+    import app.api.v1 as v1
+
+    class FakeJob:
+        def __init__(self, job_id: str, status: str):
+            self.job_id = job_id
+            self.status = status
+
+        def to_payload(self):
+            return {
+                "job_id": self.job_id,
+                "root_address": "0xd8da6bf26964af9d7eed9e03e53415d37aa96045",
+                "chain": "ethereum",
+                "status": self.status,
+                "progress": "ok",
+                "processed_wallets": 1,
+                "queued_wallets": 0,
+                "scanned_levels": 1,
+                "whale_found": False,
+                "whale_wallet": None,
+                "whale_score": None,
+                "whale_level": None,
+                "error": None,
+                "created_at": "2026-01-01T00:00:00Z",
+                "updated_at": "2026-01-01T00:00:00Z",
+                "completed_at": None,
+            }
+
+    async def fake_start(address: str, chain: str):
+        return FakeJob("job_123", "running")
+
+    async def fake_get(job_id: str):
+        return FakeJob(job_id, "running")
+
+    async def fake_cancel(job_id: str):
+        return FakeJob(job_id, "cancelled")
+
+    monkeypatch.setattr(v1, "start_whale_network_job", fake_start)
+    monkeypatch.setattr(v1, "get_whale_network_job", fake_get)
+    monkeypatch.setattr(v1, "cancel_whale_network_job", fake_cancel)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        start_res = await client.post(
+            "/api/v1/whale-network/start",
+            json={"address": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", "chain": "ethereum"},
+        )
+        assert start_res.status_code == 200
+        job_id = start_res.json()["job_id"]
+
+        status_res = await client.get(f"/api/v1/whale-network/{job_id}")
+        assert status_res.status_code == 200
+        assert status_res.json()["status"] == "running"
+
+        cancel_res = await client.post(f"/api/v1/whale-network/{job_id}/cancel")
+        assert cancel_res.status_code == 200
+        assert cancel_res.json()["status"] == "cancelled"

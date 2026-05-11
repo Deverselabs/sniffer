@@ -13,6 +13,20 @@ interface WhaleRadarProps {
   lensScoresLoading: boolean;
   lensScoresError: string | null;
   onRetryLensScores: () => void;
+  whaleNetworkJob: {
+    status: string;
+    progress: string;
+    processed_wallets: number;
+    queued_wallets: number;
+    scanned_levels: number;
+    whale_found: boolean;
+    whale_wallet: string | null;
+    whale_score: number | null;
+    whale_level: number | null;
+  } | null;
+  whaleNetworkLoading: boolean;
+  whaleNetworkError: string | null;
+  onCancelWhaleNetworkScan: () => void;
 }
 
 function tierClass(color: "green" | "purple" | "blue" | "amber" | "red") {
@@ -39,6 +53,10 @@ export function WhaleRadar({
   lensScoresLoading,
   lensScoresError,
   onRetryLensScores,
+  whaleNetworkJob,
+  whaleNetworkLoading,
+  whaleNetworkError,
+  onCancelWhaleNetworkScan,
 }: WhaleRadarProps) {
   const [showOtherLenses, setShowOtherLenses] = useState(false);
   const score = computeWhaleScore(data, profile);
@@ -59,66 +77,71 @@ export function WhaleRadar({
   }));
 
   return (
-    <section className="ui-surface ui-card">
-      <div className="ui-cluster">
-        <div>
-          <p className="ui-text-overline" style={{ color: "rgba(255,255,255,0.35)", letterSpacing: "0.08em" }}>
-            {selectedProfile.emoji} {selectedProfile.label} - Whale Radar Score
-          </p>
-          <p className="ui-title-xl ui-mt-tight">{score.total}</p>
-        </div>
-        <span className={`ui-pill ${tierClass(score.tierColor)}`}>{score.tier}</span>
-      </div>
-
-      <div className="ui-mt ui-progress-track">
-        <div className="ui-progress-fill" style={progressFillStyle(score.total)} />
-      </div>
-
-      <button
-        type="button"
-        className="ui-btn ui-btn--ghost ui-lens-compare-btn"
-        onClick={() => setShowOtherLenses((v) => !v)}
-        aria-expanded={showOtherLenses}
-      >
-        {showOtherLenses ? "Hide other scoring lenses" : "Show scores for other scoring lenses"}
-      </button>
-
-      {showOtherLenses && (
-        <div className="ui-lens-grid" role="region" aria-label="Scores for other industry profiles">
-          {lensScoresLoading && (
-            <p className="ui-text-mono-muted" style={{ gridColumn: "1 / -1" }}>
-              Loading lens scores…
+    <div className="ui-surface ui-whale-stack">
+      <article className="ui-whale-card-primary" aria-label="Whale Radar score for selected lens">
+        <div className="ui-cluster">
+          <div>
+            <p className="ui-text-overline" style={{ color: "rgba(255,255,255,0.35)", letterSpacing: "0.08em" }}>
+              {selectedProfile.emoji} {selectedProfile.label} - Whale Radar Score
             </p>
-          )}
-          {!lensScoresLoading && lensScoresError && (
-            <div className="ui-stack-tight" style={{ gridColumn: "1 / -1" }}>
-              <p className="ui-text-body text-[#ffb3b2]">{lensScoresError}</p>
-              <button type="button" className="ui-btn ui-btn--ghost" onClick={onRetryLensScores}>
-                Retry lens scores
-              </button>
-            </div>
-          )}
-          {!lensScoresLoading &&
-            !lensScoresError &&
-            otherLensRows.map((row) => (
-              <div key={row.profile} className="ui-lens-card">
-                <div className="ui-lens-card-title">
-                  {row.emoji} {row.label}
-                </div>
-                <div className="ui-lens-card-score">{row.total}</div>
-              </div>
-            ))}
+            <p className="ui-title-xl ui-mt-tight">{score.total}</p>
+          </div>
+          <span className={`ui-pill ${tierClass(score.tierColor)}`}>{score.tier}</span>
         </div>
-      )}
 
-      <details className="ui-collapsible">
+        <div className="ui-mt ui-progress-track">
+          <div className="ui-progress-fill" style={progressFillStyle(score.total)} />
+        </div>
+      </article>
+
+      <section className="ui-whale-card-compare" aria-label="Compare scores across other industry lenses">
+        <p className="ui-whale-compare-heading">Other scoring lenses</p>
+        <button
+          type="button"
+          className="ui-btn ui-btn--ghost ui-lens-compare-btn"
+          onClick={() => setShowOtherLenses((v) => !v)}
+          aria-expanded={showOtherLenses}
+        >
+          {showOtherLenses ? "Hide other scoring lenses" : "Show scores for other scoring lenses"}
+        </button>
+
+        {showOtherLenses && (
+          <div className="ui-lens-grid" role="region" aria-label="Scores for other industry profiles">
+            {lensScoresLoading && (
+              <p className="ui-text-mono-muted" style={{ gridColumn: "1 / -1" }}>
+                Loading lens scores…
+              </p>
+            )}
+            {!lensScoresLoading && lensScoresError && (
+              <div className="ui-stack-tight" style={{ gridColumn: "1 / -1" }}>
+                <p className="ui-text-body text-[#ffb3b2]">{lensScoresError}</p>
+                <button type="button" className="ui-btn ui-btn--ghost" onClick={onRetryLensScores}>
+                  Retry lens scores
+                </button>
+              </div>
+            )}
+            {!lensScoresLoading &&
+              !lensScoresError &&
+              otherLensRows.map((row) => (
+                <div key={row.profile} className="ui-lens-card">
+                  <div className="ui-lens-card-title">
+                    {row.emoji} {row.label}
+                  </div>
+                  <div className="ui-lens-card-score">{row.total}</div>
+                </div>
+              ))}
+          </div>
+        )}
+      </section>
+
+      <details className="ui-whale-breakdown">
         <summary>
           <span>Score breakdown — {selectedProfile.label}</span>
-          <span aria-hidden style={{ color: "rgba(127,119,221,0.45)" }}>
+          <span aria-hidden style={{ color: "rgba(251, 191, 36, 0.55)" }}>
             ▾
           </span>
         </summary>
-        <div className="ui-collapsible-body">
+        <div className="ui-whale-breakdown-body">
           <div className="ui-table-wrap-inner">
             <table className="ui-table">
               <thead>
@@ -151,6 +174,40 @@ export function WhaleRadar({
           </div>
         </div>
       </details>
-    </section>
+
+      <section className="ui-whale-network-card" aria-live="polite">
+        <p className="ui-whale-network-heading">Whale network scan (4-level graph)</p>
+        {whaleNetworkError && <p className="ui-text-body text-[#ffb3b2]">{whaleNetworkError}</p>}
+        {!whaleNetworkError && whaleNetworkJob && (
+          <div className="ui-stack-tight">
+            <p className="ui-text-body text-[rgba(255,255,255,0.6)]">
+              Status: <span className="text-white">{whaleNetworkJob.status}</span> — {whaleNetworkJob.progress}
+            </p>
+            <p className="ui-text-caption">
+              Processed {whaleNetworkJob.processed_wallets} wallet(s), queued {whaleNetworkJob.queued_wallets}, depth{" "}
+              {Math.min(4, whaleNetworkJob.scanned_levels + 1)}/4
+            </p>
+            {whaleNetworkJob.whale_found ? (
+              <p className="ui-text-body text-[#5DCAA5]">
+                Whale network detected via wallet {whaleNetworkJob.whale_wallet} (score {whaleNetworkJob.whale_score},
+                level {whaleNetworkJob.whale_level}).
+              </p>
+            ) : (
+              whaleNetworkJob.status === "completed" && (
+                <p className="ui-text-body text-[rgba(255,255,255,0.7)]">No whale wallet found within 4 levels.</p>
+              )
+            )}
+            {whaleNetworkLoading && (
+              <button type="button" className="ui-btn ui-btn--ghost" onClick={onCancelWhaleNetworkScan}>
+                Cancel background scan
+              </button>
+            )}
+          </div>
+        )}
+        {!whaleNetworkError && !whaleNetworkJob && (
+          <p className="ui-text-caption">Preparing whale network scan…</p>
+        )}
+      </section>
+    </div>
   );
 }
