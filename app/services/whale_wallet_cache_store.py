@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from psycopg import errors as pg_errors
 from psycopg.types.json import Json
 
 from app.db import get_conn
@@ -63,6 +64,8 @@ def whale_wallet_cache_get(chain: str, address_key: str, tx_window: str) -> Whal
             neighbors=nlist,
             updated_at=ua,
         )
+    except pg_errors.UndefinedTable:
+        return None
     except Exception as exc:  # noqa: BLE001
         logger.warning("whale_wallet_cache_get failed: %s", exc)
         return None
@@ -111,5 +114,7 @@ def whale_wallet_cache_put(
                     ),
                 )
             conn.commit()
+    except pg_errors.UndefinedTable:
+        return
     except Exception as exc:  # noqa: BLE001
         logger.warning("whale_wallet_cache_put failed: %s", exc)

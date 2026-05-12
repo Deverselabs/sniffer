@@ -50,6 +50,7 @@ This repo now includes a Python scoring engine and Postgres schema used for 10-t
 - Migration: `migrations/002_multichain.sql`
 - Migration: `migrations/003_admin_candidates.sql`
 - Migration: `migrations/004_alerting.sql`
+- Migration: `migrations/005_whale_wallet_scan_cache.sql`
 - Seed source: `data/gambling.json`
 - Seed script: `scripts/seed_gambling_contracts.py`
 
@@ -68,6 +69,7 @@ psql postgresql://postgres:postgres@localhost:5432/sniffer -f migrations/001_ini
 psql postgresql://postgres:postgres@localhost:5432/sniffer -f migrations/002_multichain.sql
 psql postgresql://postgres:postgres@localhost:5432/sniffer -f migrations/003_admin_candidates.sql
 psql postgresql://postgres:postgres@localhost:5432/sniffer -f migrations/004_alerting.sql
+psql postgresql://postgres:postgres@localhost:5432/sniffer -f migrations/005_whale_wallet_scan_cache.sql
 python scripts/seed_gambling_contracts.py
 ```
 
@@ -80,6 +82,7 @@ Expected seed result: 13 records imported (7 verified, 6 candidate).
 - Service `sniffer` (static) keeps running as before.
 - New database `sniffer-postgres` is provisioned separately.
 - `DATABASE_URL` is injected from the Render database connection string.
+- **Migrations are not run automatically.** After the DB is created, run each file in `migrations/` once against that database (Render **Shell** on the API service with `psql $DATABASE_URL -f ...`, or a one-off job). Optionally add a Render `preDeployCommand` / release script to apply SQL on each deploy.
 - Frontend build uses `ETHERSCAN_API_KEY` (no duplicated key names required in Render env).
 
 Required env vars in Render service:

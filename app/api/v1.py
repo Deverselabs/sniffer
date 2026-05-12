@@ -7,11 +7,13 @@ import asyncio
 import json
 import hmac
 import hashlib
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Literal
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field, field_validator
+from psycopg import errors as pg_errors
 
 from app.db import get_conn
 from app.services.notify import notify
@@ -30,6 +32,7 @@ from app.utils.validators import validate_address
 
 router = APIRouter(prefix="/api/v1", tags=["scan"])
 SUPPORTED_CHAINS = {"ethereum", "tron", "solana"}
+logger = logging.getLogger(__name__)
 
 
 class ScanRequest(BaseModel):
@@ -430,19 +433,25 @@ async def webhook_scan(request: Request, background_tasks: BackgroundTasks) -> D
 )
 async def alerts_recent() -> Dict[str, Any]:
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT address, chain, score, route, payload::text, created_at
-                FROM alerts_log
-                WHERE score >= 70 AND created_at >= %s
-                ORDER BY created_at DESC
-                LIMIT 100
-                """,
-                (cutoff,),
-            )
-            rows = cur.fetchall()
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT address, chain, score, route, payload::text, created_at
+                    FROM alerts_log
+                    WHERE score >= 70 AND created_at >= %s
+                    ORDER BY created_at DESC
+                    LIMIT 100
+                    """,
+                    (cutoff,),
+                )
+                rows = cur.fetchall()
+    except pg_errors.UndefinedTable:
+        return {"count": 0, "items": []}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("alerts_recent failed: %s", exc)
+        return {"count": 0, "items": []}
     items = [
         {
             "address": row[0],

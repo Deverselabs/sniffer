@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import httpx
+from psycopg import errors as pg_errors
 
 from app.db import get_conn
 
@@ -77,40 +78,50 @@ async def _send_telegram(text: str) -> None:
 
 
 def _queue_digest(payload: dict[str, Any]) -> None:
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO digest_email_queue (address, chain, score, payload, queued_at)
-                VALUES (%s, %s, %s, %s::jsonb, NOW())
-                """,
-                (
-                    payload.get("address", ""),
-                    payload.get("chain", "ethereum"),
-                    int(payload.get("score", 0)),
-                    json.dumps(payload),
-                ),
-            )
-        conn.commit()
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO digest_email_queue (address, chain, score, payload, queued_at)
+                    VALUES (%s, %s, %s, %s::jsonb, NOW())
+                    """,
+                    (
+                        payload.get("address", ""),
+                        payload.get("chain", "ethereum"),
+                        int(payload.get("score", 0)),
+                        json.dumps(payload),
+                    ),
+                )
+            conn.commit()
+    except pg_errors.UndefinedTable:
+        return
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("digest queue insert failed: %s", exc)
 
 
 def _persist_alert(payload: dict[str, Any], route: str) -> None:
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO alerts_log (address, chain, score, route, payload, created_at)
-                VALUES (%s, %s, %s, %s, %s::jsonb, NOW())
-                """,
-                (
-                    payload.get("address", "").lower(),
-                    payload.get("chain", "ethereum"),
-                    int(payload.get("score", 0)),
-                    route,
-                    json.dumps(payload),
-                ),
-            )
-        conn.commit()
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO alerts_log (address, chain, score, route, payload, created_at)
+                    VALUES (%s, %s, %s, %s, %s::jsonb, NOW())
+                    """,
+                    (
+                        payload.get("address", "").lower(),
+                        payload.get("chain", "ethereum"),
+                        int(payload.get("score", 0)),
+                        route,
+                        json.dumps(payload),
+                    ),
+                )
+            conn.commit()
+    except pg_errors.UndefinedTable:
+        return
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("alerts_log insert failed: %s", exc)
 
 
 async def notify(payload: dict[str, Any]) -> dict[str, Any]:
