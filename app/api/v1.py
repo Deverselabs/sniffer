@@ -63,11 +63,12 @@ class WhaleNetworkStartRequest(BaseModel):
             "BFS graph depth (root = level 0). 1–5. Omit to use server default WHALE_NETWORK_MAX_LEVEL."
         ),
     )
-    telegram_chat_id: str = Field(
-        ...,
-        min_length=1,
+    telegram_chat_id: str | None = Field(
+        default=None,
         max_length=80,
-        description="Telegram chat or channel id for whale map progress and results.",
+        description=(
+            "Optional UI Telegram chat id. When omitted, whale map still runs if TELEGRAM_CHAT_ID is set on the server."
+        ),
     )
 
     @field_validator("tx_window_days")
@@ -81,13 +82,11 @@ class WhaleNetworkStartRequest(BaseModel):
 
     @field_validator("telegram_chat_id", mode="before")
     @classmethod
-    def normalize_telegram(cls, v: object) -> str:
+    def normalize_telegram(cls, v: object) -> str | None:
         if v is None:
-            raise ValueError("telegram_chat_id is required")
+            return None
         s = str(v).strip()
-        if not s:
-            raise ValueError("telegram_chat_id is required")
-        return s
+        return s or None
 
 
 class WebhookRequest(BaseModel):
@@ -256,7 +255,7 @@ async def lens_scores(body: LensScoresRequest) -> Dict[str, Any]:
     description=(
         "Start background BFS scan up to max_levels (1–5) or server default. Neighbors come from "
         "counterparties in recent transactions (tx_window_days, or full history when null). "
-        "telegram_chat_id is required for notifications and scan coordination."
+        "Pass telegram_chat_id for an extra UI chat, or rely on TELEGRAM_CHAT_ID on the server (at least one required)."
     ),
 )
 async def whale_network_start(body: WhaleNetworkStartRequest) -> Dict[str, Any]:
@@ -264,11 +263,21 @@ async def whale_network_start(body: WhaleNetworkStartRequest) -> Dict[str, Any]:
     chain = body.chain
     if not validate_address(chain, address):
         raise HTTPException(status_code=400, detail=f"Invalid {chain} address format")
+    ui_tg = (body.telegram_chat_id or "").strip()
+    env_tg = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    if not ui_tg and not env_tg:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No Telegram destination: configure TELEGRAM_CHAT_ID on the server, or pass "
+                "telegram_chat_id in the request body."
+            ),
+        )
     job = await start_whale_network_job(
         address,
         chain,
         tx_window_days=body.tx_window_days,
-        telegram_chat_id=body.telegram_chat_id,
+        telegram_chat_id=ui_tg or None,
         max_levels=body.max_levels,
     )
     return job.to_payload()

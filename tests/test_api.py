@@ -304,13 +304,26 @@ def test_whale_network_start_request_max_levels_range():
         WhaleNetworkStartRequest(address=addr, chain="ethereum", max_levels=6, telegram_chat_id="-1001")
 
 
-def test_whale_network_start_request_requires_telegram():
-    from pydantic import ValidationError
-
+def test_whale_network_start_request_telegram_optional():
     from app.api.v1 import WhaleNetworkStartRequest
 
     addr = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
-    with pytest.raises(ValidationError):
-        WhaleNetworkStartRequest(address=addr, chain="ethereum")
-    with pytest.raises(ValidationError):
-        WhaleNetworkStartRequest(address=addr, chain="ethereum", telegram_chat_id="   ")
+    m = WhaleNetworkStartRequest(address=addr, chain="ethereum", telegram_chat_id="-1001")
+    assert m.telegram_chat_id == "-1001"
+    m2 = WhaleNetworkStartRequest(address=addr, chain="ethereum")
+    assert m2.telegram_chat_id is None
+    m3 = WhaleNetworkStartRequest(address=addr, chain="ethereum", telegram_chat_id="   ")
+    assert m3.telegram_chat_id is None
+
+
+@pytest.mark.asyncio
+async def test_whale_network_start_400_without_any_telegram_destination(monkeypatch):
+    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+    addr = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.post(
+            "/api/v1/whale-network/start",
+            json={"address": addr, "chain": "ethereum"},
+        )
+    assert res.status_code == 400
+    assert "TELEGRAM_CHAT_ID" in res.json().get("detail", "")

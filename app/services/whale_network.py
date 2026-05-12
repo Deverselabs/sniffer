@@ -187,7 +187,10 @@ class WhaleNetworkJob:
             "root_address": self.root_address,
             "chain": self.chain,
             "tx_window_days": self.tx_window_days,
-            "telegram_notifications": bool(self.telegram_chat_id and self.telegram_chat_id.strip()),
+            "telegram_notifications": bool(
+                (self.telegram_chat_id and self.telegram_chat_id.strip())
+                or (os.getenv("TELEGRAM_CHAT_ID", "").strip())
+            ),
             "status": self.status,
             "progress": self.progress,
             "processed_wallets": self.processed_wallets,
@@ -785,7 +788,7 @@ async def _run_job(job_id: str) -> None:
                         best_key = wallet_key
 
                     if (
-                        job.telegram_chat_id
+                        _whale_telegram_recipients(job)
                         and job.processed_wallets % _TELEGRAM_PROGRESS_EVERY == 0
                         and whale_hit is None
                     ):

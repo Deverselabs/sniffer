@@ -252,8 +252,9 @@ export function WhaleRadar({
 
         {!whaleTelegramForScan.trim() && (
           <p className="ui-whale-status-muted" style={{ marginTop: "0.5rem" }}>
-            Add your Telegram chat id under <strong>Go deeper</strong> to run the whale map (required for scan
-            notifications). Until then, no map job is started. Defaults are 5-day window and 2 levels.
+            Whale map starts automatically for this wallet; progress and results appear below. Telegram alerts use the
+            server <code className="text-[rgba(175,169,236,0.9)]">TELEGRAM_CHAT_ID</code> when it is configured. Under{" "}
+            <strong>Go deeper</strong> you can optionally add a second chat id to notify that destination too.
           </p>
         )}
 
@@ -429,16 +430,15 @@ export function WhaleRadar({
             <option value="4">4 levels</option>
             <option value="5">5 levels</option>
           </select>
-          <label className="ui-whale-field-label ui-mt-tight">Telegram</label>
+          <label className="ui-whale-field-label ui-mt-tight">Telegram (optional extra chat)</label>
           <input
             type="text"
             className="ui-whale-field-control"
-            placeholder="Chat or channel id, e.g. -100…"
+            placeholder="Leave empty to use only server TELEGRAM_CHAT_ID"
             value={whaleTelegramForScan}
             onChange={(e) => onWhaleTelegramForScanChange(e.target.value)}
-            aria-label="Telegram chat or channel id (required)"
+            aria-label="Optional extra Telegram chat or channel id"
             autoComplete="off"
-            required
           />
         </div>
       </details>

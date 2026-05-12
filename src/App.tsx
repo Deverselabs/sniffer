@@ -85,16 +85,14 @@ function App() {
       pauseWhaleNetworkPolling();
       return;
     }
-    const tg = whaleTelegramForScan.trim();
-    if (!tg) {
-      pauseWhaleNetworkPolling();
-      return;
-    }
     const opts: WhaleNetworkStartOptions = {
       tx_window_days: whaleTxWindowDays,
       max_levels: whaleMaxLevels,
-      telegram_chat_id: tg,
     };
+    const trimmed = whaleTelegramForScan.trim();
+    if (trimmed) {
+      opts.telegram_chat_id = trimmed;
+    }
     void startWhaleNetworkScan(activeData.address, activeData.chain, opts);
   }, [
     activeData,

@@ -150,17 +150,10 @@ export function useWhaleNetworkScan() {
 
   const start = useCallback(
     async (address: string, chain: Chain, opts?: WhaleNetworkStartOptions | null) => {
-      const tg = (opts?.telegram_chat_id ?? "").trim();
-      if (!tg) {
-        clearPoll();
-        activeJobIdRef.current = null;
-        activeResumeKeyRef.current = null;
-        setState({ job: null, loading: false, error: null });
-        return;
-      }
+      const tgUi = (opts?.telegram_chat_id ?? "").trim();
       const txw = resolvedTxWindow(opts);
       const maxLv = resolvedMaxLevels(opts);
-      const key = resumeStorageKey(address, chain, txw, maxLv, tg);
+      const key = resumeStorageKey(address, chain, txw, maxLv, tgUi);
       clearPoll();
 
       if (activeResumeKeyRef.current !== null && activeResumeKeyRef.current !== key) {
@@ -218,10 +211,12 @@ export function useWhaleNetworkScan() {
       try {
         const apiOpts: WhaleNetworkStartOptions = {
           max_levels: resolvedMaxLevels(opts),
-          telegram_chat_id: tg,
         };
         if (opts?.tx_window_days !== undefined) {
           apiOpts.tx_window_days = opts.tx_window_days;
+        }
+        if (tgUi) {
+          apiOpts.telegram_chat_id = tgUi;
         }
         const job = await startWhaleNetworkScan(address, chain, apiOpts);
         adoptJob(job, key);

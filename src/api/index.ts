@@ -91,8 +91,11 @@ export async function startWhaleNetworkScan(
   const body: Record<string, unknown> = {
     address,
     chain,
-    telegram_chat_id: options.telegram_chat_id.trim(),
   };
+  const tg = (options.telegram_chat_id ?? "").trim();
+  if (tg) {
+    body.telegram_chat_id = tg;
+  }
   if (options.tx_window_days !== undefined) {
     body.tx_window_days = options.tx_window_days;
   }
