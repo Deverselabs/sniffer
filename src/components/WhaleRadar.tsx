@@ -161,46 +161,6 @@ export function WhaleRadar({
         </div>
       </article>
 
-      <section className="ui-whale-panel-section" aria-label="Compare scores across other industry lenses">
-        <p className="ui-whale-compare-heading">Other scoring lenses</p>
-        <button
-          type="button"
-          className="ui-btn ui-btn--ghost ui-lens-compare-btn"
-          onClick={() => setShowOtherLenses((v) => !v)}
-          aria-expanded={showOtherLenses}
-        >
-          {showOtherLenses ? "Hide other scoring lenses" : "Show scores for other scoring lenses"}
-        </button>
-
-        {showOtherLenses && (
-          <div className="ui-lens-grid" role="region" aria-label="Scores for other industry profiles">
-            {lensScoresLoading && (
-              <p className="ui-text-mono-muted" style={{ gridColumn: "1 / -1" }}>
-                Loading lens scores…
-              </p>
-            )}
-            {!lensScoresLoading && lensScoresError && (
-              <div className="ui-stack-tight" style={{ gridColumn: "1 / -1" }}>
-                <p className="ui-text-body text-[#ffb3b2]">{lensScoresError}</p>
-                <button type="button" className="ui-btn ui-btn--ghost" onClick={onRetryLensScores}>
-                  Retry lens scores
-                </button>
-              </div>
-            )}
-            {!lensScoresLoading &&
-              !lensScoresError &&
-              otherLensRows.map((row) => (
-                <div key={row.profile} className="ui-lens-card">
-                  <div className="ui-lens-card-title">
-                    {row.emoji} {row.label}
-                  </div>
-                  <div className="ui-lens-card-score">{row.total}</div>
-                </div>
-              ))}
-          </div>
-        )}
-      </section>
-
       <details className="ui-whale-panel-section ui-whale-breakdown">
         <summary>
           <span>Score breakdown — {selectedProfile.label}</span>
@@ -241,6 +201,46 @@ export function WhaleRadar({
           </div>
         </div>
       </details>
+
+      <section className="ui-whale-panel-section" aria-label="Compare scores across other industry lenses">
+        <p className="ui-whale-compare-heading">Other scoring lenses</p>
+        <button
+          type="button"
+          className="ui-btn ui-btn--ghost ui-lens-compare-btn"
+          onClick={() => setShowOtherLenses((v) => !v)}
+          aria-expanded={showOtherLenses}
+        >
+          {showOtherLenses ? "Hide other scoring lenses" : "Show scores for other scoring lenses"}
+        </button>
+
+        {showOtherLenses && (
+          <div className="ui-lens-grid" role="region" aria-label="Scores for other industry profiles">
+            {lensScoresLoading && (
+              <p className="ui-text-mono-muted" style={{ gridColumn: "1 / -1" }}>
+                Loading lens scores…
+              </p>
+            )}
+            {!lensScoresLoading && lensScoresError && (
+              <div className="ui-stack-tight" style={{ gridColumn: "1 / -1" }}>
+                <p className="ui-text-body text-[#ffb3b2]">{lensScoresError}</p>
+                <button type="button" className="ui-btn ui-btn--ghost" onClick={onRetryLensScores}>
+                  Retry lens scores
+                </button>
+              </div>
+            )}
+            {!lensScoresLoading &&
+              !lensScoresError &&
+              otherLensRows.map((row) => (
+                <div key={row.profile} className="ui-lens-card">
+                  <div className="ui-lens-card-title">
+                    {row.emoji} {row.label}
+                  </div>
+                  <div className="ui-lens-card-score">{row.total}</div>
+                </div>
+              ))}
+          </div>
+        )}
+      </section>
         </div>
       </div>
 
