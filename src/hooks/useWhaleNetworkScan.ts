@@ -254,6 +254,13 @@ export function useWhaleNetworkScan() {
     }
   }, [clearPoll]);
 
+  const pausePolling = useCallback(() => {
+    clearPoll();
+    activeJobIdRef.current = null;
+    activeResumeKeyRef.current = null;
+    setState((s) => ({ ...s, job: null, loading: false }));
+  }, [clearPoll]);
+
   useEffect(() => {
     return () => {
       clearPoll();
@@ -264,6 +271,7 @@ export function useWhaleNetworkScan() {
     ...state,
     start,
     cancel,
+    pausePolling,
   };
 }
 

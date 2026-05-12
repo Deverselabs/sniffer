@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
-import { fetchWalletData } from "../api";
-import type { Chain } from "../api";
+import { fetchWalletData, fetchWhaleNetworkStatus, startWhaleNetworkScan } from "../api";
+import type { Chain, WhaleNetworkJob } from "../api";
+import { NEIGHBOR_WINDOW_PRESET_DAYS, neighborWindowSelectKey } from "../utils/whaleNeighborWindowUi";
 import { downloadCsv } from "../utils/exportCsv";
 import { explorerBase, isValidAddressForChain } from "../utils/address";
 import { shortAddr } from "../utils/format";
@@ -22,7 +23,8 @@ type SortKey =
   | "incomingTxns"
   | "uniqueSenders"
   | "walletAgeDays"
-  | "gamblingInteractions";
+  | "gamblingInteractions"
+  | "whaleMapLabel";
 
 interface BulkUploadProps {
   onAddressSelect: (address: string) => void;
@@ -45,6 +47,8 @@ interface ScannedRow {
   walletAgeDays: number;
   gamblingInteractions: number;
   tierBreakdown: Record<string, number>;
+  whaleMapLabel?: string;
+  whaleMapDetail?: string;
 }
 
 function parseFirstColumn(row: string): string {
@@ -66,6 +70,18 @@ function sleep(ms: number) {
   });
 }
 
+const WHALE_JOB_TERMINAL = new Set(["completed", "failed", "cancelled"]);
+
+async function pollWhaleJobUntilTerminal(jobId: string, maxWaitMs: number): Promise<WhaleNetworkJob> {
+  const t0 = Date.now();
+  while (Date.now() - t0 < maxWaitMs) {
+    const job = await fetchWhaleNetworkStatus(jobId);
+    if (WHALE_JOB_TERMINAL.has(job.status)) return job;
+    await sleep(2500);
+  }
+  throw new Error("Whale map scan timed out waiting for the server.");
+}
+
 export function BulkUpload({ onAddressSelect, profile, chain, onCloseToLanding }: BulkUploadProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [fileName, setFileName] = useState<string>("");
@@ -77,6 +93,11 @@ export function BulkUpload({ onAddressSelect, profile, chain, onCloseToLanding }
   const [rows, setRows] = useState<ScannedRow[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [includeWhaleMap, setIncludeWhaleMap] = useState(true);
+  const [bulkWhaleTxWindowDays, setBulkWhaleTxWindowDays] = useState(5);
+  const [bulkWhaleMaxLevels, setBulkWhaleMaxLevels] = useState(2);
+  const [bulkWhaleTelegram, setBulkWhaleTelegram] = useState("");
+  const [scanPhase, setScanPhase] = useState<"idle" | "scoring" | "whale">("idle");
 
   function parseCsvText(text: string) {
     const rawLines = text
@@ -107,8 +128,20 @@ export function BulkUpload({ onAddressSelect, profile, chain, onCloseToLanding }
       }
     }
 
-    const limited = validAddresses.slice(0, MAX_ADDRESSES);
-    skipped += validAddresses.length - limited.length;
+    const seenAddr = new Set<string>();
+    const deduped: string[] = [];
+    for (const addr of validAddresses) {
+      const key = chain === "ethereum" ? addr.toLowerCase() : addr.trim();
+      if (seenAddr.has(key)) {
+        continue;
+      }
+      seenAddr.add(key);
+      deduped.push(addr);
+    }
+    skipped += validAddresses.length - deduped.length;
+
+    const limited = deduped.slice(0, MAX_ADDRESSES);
+    skipped += deduped.length - limited.length;
 
     setAddresses(limited);
     setSkippedRows(skipped);
@@ -153,6 +186,11 @@ export function BulkUpload({ onAddressSelect, profile, chain, onCloseToLanding }
     setRows([]);
     setParseError(null);
     setProgress({ current: 0, total: 0 });
+    setIncludeWhaleMap(true);
+    setBulkWhaleTxWindowDays(5);
+    setBulkWhaleMaxLevels(2);
+    setBulkWhaleTelegram("");
+    setScanPhase("idle");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -167,9 +205,17 @@ export function BulkUpload({ onAddressSelect, profile, chain, onCloseToLanding }
 
     setIsScanning(true);
     setRows([]);
+    setScanPhase("scoring");
     setProgress({ current: 0, total: addresses.length });
 
-    const results: ScannedRow[] = [];
+    let results: ScannedRow[] = [];
+
+    const patchRow = (addr: string, patch: Partial<ScannedRow>) => {
+      const ix = results.findIndex((r) => r.address === addr);
+      if (ix === -1) return;
+      results = [...results.slice(0, ix), { ...results[ix], ...patch }, ...results.slice(ix + 1)];
+      setRows([...results]);
+    };
 
     for (let i = 0; i < addresses.length; i += 1) {
       const address = addresses[i];
@@ -216,6 +262,58 @@ export function BulkUpload({ onAddressSelect, profile, chain, onCloseToLanding }
       }
     }
 
+    const tg = bulkWhaleTelegram.trim();
+    if (includeWhaleMap && tg) {
+      setScanPhase("whale");
+      const perWalletMs = 10 * 60 * 1000;
+      for (let i = 0; i < addresses.length; i += 1) {
+        const address = addresses[i];
+        setProgress({ current: i + 1, total: addresses.length });
+        const row = results.find((r) => r.address === address);
+        if (!row || row.error) {
+          patchRow(address, { whaleMapLabel: "—", whaleMapDetail: row?.error ? "Sniff error" : "" });
+          continue;
+        }
+        try {
+          const job = await startWhaleNetworkScan(address, chain, {
+            tx_window_days: bulkWhaleTxWindowDays,
+            max_levels: bulkWhaleMaxLevels,
+            telegram_chat_id: tg,
+          });
+          const final = await pollWhaleJobUntilTerminal(job.job_id, perWalletMs);
+          if (final.status === "failed") {
+            patchRow(address, {
+              whaleMapLabel: "Issue",
+              whaleMapDetail: (final.error ?? "failed").slice(0, 120),
+            });
+          } else if (final.status === "cancelled") {
+            patchRow(address, { whaleMapLabel: "Cancelled", whaleMapDetail: "" });
+          } else if (final.whale_found) {
+            const w = final.whale_wallet ?? "";
+            patchRow(address, {
+              whaleMapLabel: "Hit",
+              whaleMapDetail: `${shortAddr(w)} · score ${final.whale_score ?? "?"}`,
+            });
+          } else {
+            patchRow(address, { whaleMapLabel: "Done", whaleMapDetail: "No high-score in map" });
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Whale map failed";
+          patchRow(address, { whaleMapLabel: "Issue", whaleMapDetail: msg.slice(0, 120) });
+        }
+        if (i < addresses.length - 1) {
+          await sleep(400);
+        }
+      }
+    } else if (includeWhaleMap && !tg) {
+      for (const r of results) {
+        if (!r.error) {
+          patchRow(r.address, { whaleMapLabel: "Skipped", whaleMapDetail: "Telegram required" });
+        }
+      }
+    }
+
+    setScanPhase("idle");
     setIsScanning(false);
   }
 
@@ -225,7 +323,7 @@ export function BulkUpload({ onAddressSelect, profile, chain, onCloseToLanding }
       return;
     }
     setSortKey(nextKey);
-    setSortDirection(nextKey === "score" ? "desc" : "asc");
+    setSortDirection(nextKey === "score" || nextKey === "whaleMapLabel" ? "desc" : "asc");
   }
 
   const sortedRows = useMemo(() => {
@@ -248,7 +346,9 @@ export function BulkUpload({ onAddressSelect, profile, chain, onCloseToLanding }
                       ? a.uniqueSenders
                       : sortKey === "walletAgeDays"
                         ? a.walletAgeDays
-                        : a.gamblingInteractions;
+                        : sortKey === "whaleMapLabel"
+                          ? (a.whaleMapLabel ?? "").toLowerCase()
+                          : a.gamblingInteractions;
 
       const bVal =
         sortKey === "address"
@@ -267,7 +367,9 @@ export function BulkUpload({ onAddressSelect, profile, chain, onCloseToLanding }
                       ? b.uniqueSenders
                       : sortKey === "walletAgeDays"
                         ? b.walletAgeDays
-                        : b.gamblingInteractions;
+                        : sortKey === "whaleMapLabel"
+                          ? (b.whaleMapLabel ?? "").toLowerCase()
+                          : b.gamblingInteractions;
 
       if (typeof aVal === "string" && typeof bVal === "string") {
         return aVal.localeCompare(bVal) * dir;
@@ -300,6 +402,8 @@ export function BulkUpload({ onAddressSelect, profile, chain, onCloseToLanding }
         "t8_large_deposit_count",
         "t9_balance_strength",
         "t10_risk_adjustment",
+        "whale_map_status",
+        "whale_map_detail",
         "explorer_link",
       ],
       ...exportRows.map((row) => [
@@ -322,6 +426,8 @@ export function BulkUpload({ onAddressSelect, profile, chain, onCloseToLanding }
         row.error ? "" : String(row.tierBreakdown["T8 Large Deposit Count"] ?? 0),
         row.error ? "" : String(row.tierBreakdown["T9 Balance Strength"] ?? 0),
         row.error ? "" : String(row.tierBreakdown["T10 Risk Adjustment"] ?? 0),
+        row.whaleMapLabel ?? "",
+        row.whaleMapDetail ?? "",
         `${explorerBase(chain)}/address/${row.address}`,
       ]),
     ];
@@ -403,6 +509,104 @@ export function BulkUpload({ onAddressSelect, profile, chain, onCloseToLanding }
           {skippedRows > 0 && (
             <p className="ui-text-body text-amber-300/90">{skippedRows} row(s) were skipped.</p>
           )}
+          <details className="ui-surface ui-card ui-whale-scan-further">
+            <summary className="ui-whale-scan-further-summary">
+              Whale map deep search (same options as single sniff)
+            </summary>
+            <div className="ui-whale-scan-further-body">
+              <label className="ui-whale-field-label ui-row" style={{ gap: "0.5rem", alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={includeWhaleMap}
+                  onChange={(e) => setIncludeWhaleMap(e.target.checked)}
+                  disabled={isScanning}
+                />
+                Run whale map after scoring each wallet
+              </label>
+              <label className="ui-whale-field-label ui-mt-tight">Neighbor activity window</label>
+              <select
+                className="ui-whale-field-control"
+                value={neighborWindowSelectKey(bulkWhaleTxWindowDays)}
+                disabled={isScanning || !includeWhaleMap}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "custom") {
+                    const cur = bulkWhaleTxWindowDays;
+                    if (
+                      cur >= 1 &&
+                      cur <= 90 &&
+                      !(NEIGHBOR_WINDOW_PRESET_DAYS as readonly number[]).includes(cur)
+                    ) {
+                      setBulkWhaleTxWindowDays(cur);
+                    } else if (cur >= 1 && cur <= 90) {
+                      setBulkWhaleTxWindowDays(10);
+                    } else {
+                      setBulkWhaleTxWindowDays(14);
+                    }
+                    return;
+                  }
+                  setBulkWhaleTxWindowDays(Number(v));
+                }}
+                aria-label="Neighbor window for bulk whale map"
+              >
+                <option value="1">Last 1 day</option>
+                <option value="2">Last 2 days</option>
+                <option value="3">Last 3 days</option>
+                <option value="5">Last 5 days (default)</option>
+                <option value="7">Last 7 days</option>
+                <option value="15">Last 15 days</option>
+                <option value="30">Last 30 days</option>
+                <option value="custom">Custom (1–90 days)</option>
+              </select>
+              {neighborWindowSelectKey(bulkWhaleTxWindowDays) === "custom" && (
+                <>
+                  <label className="ui-whale-field-label ui-mt-tight" htmlFor="bulk-whale-custom-days">
+                    Custom days (1–90)
+                  </label>
+                  <input
+                    id="bulk-whale-custom-days"
+                    type="number"
+                    min={1}
+                    max={90}
+                    step={1}
+                    className="ui-whale-field-control"
+                    disabled={isScanning || !includeWhaleMap}
+                    value={bulkWhaleTxWindowDays}
+                    onChange={(e) => {
+                      const raw = parseInt(e.target.value, 10);
+                      if (!Number.isFinite(raw)) return;
+                      setBulkWhaleTxWindowDays(Math.max(1, Math.min(90, raw)));
+                    }}
+                  />
+                </>
+              )}
+              <label className="ui-whale-field-label ui-mt-tight">Search depth (graph levels)</label>
+              <select
+                className="ui-whale-field-control"
+                value={String(bulkWhaleMaxLevels)}
+                disabled={isScanning || !includeWhaleMap}
+                onChange={(e) => setBulkWhaleMaxLevels(Number(e.target.value))}
+                aria-label="Whale map depth for bulk"
+              >
+                <option value="1">1 level (root only)</option>
+                <option value="2">2 levels (root + neighbors)</option>
+                <option value="3">3 levels</option>
+                <option value="4">4 levels</option>
+                <option value="5">5 levels</option>
+              </select>
+              <label className="ui-whale-field-label ui-mt-tight">Telegram</label>
+              <input
+                type="text"
+                className="ui-whale-field-control"
+                placeholder="Chat or channel id, e.g. -100…"
+                value={bulkWhaleTelegram}
+                disabled={isScanning || !includeWhaleMap}
+                onChange={(e) => setBulkWhaleTelegram(e.target.value)}
+                aria-label="Telegram for bulk whale map"
+                autoComplete="off"
+              />
+            </div>
+          </details>
           <div className="ui-row">
             <button type="button" className="ui-btn ui-btn--primary" onClick={runScan} disabled={isScanning}>
               {isScanning ? "Scanning..." : "Run Whale Radar on all"}
@@ -426,7 +630,9 @@ export function BulkUpload({ onAddressSelect, profile, chain, onCloseToLanding }
       {isScanning && (
         <div className="ui-stack-tight ui-card ui-card--muted">
           <p className="ui-text-mono-muted">
-            Scanning {progress.current} of {progress.total}...
+            {scanPhase === "whale"
+              ? `Whale map ${progress.current} of ${progress.total}…`
+              : `Scoring wallets ${progress.current} of ${progress.total}…`}
           </p>
           <div className="ui-progress-track">
             <div
@@ -493,6 +699,10 @@ export function BulkUpload({ onAddressSelect, profile, chain, onCloseToLanding }
                   <th className="ui-th-sort" onClick={() => toggleSort("gamblingInteractions")}>
                     Gambling Interactions
                   </th>
+                  <th className="ui-th-sort" onClick={() => toggleSort("whaleMapLabel")}>
+                    Whale map
+                  </th>
+                  <th>Whale detail</th>
                 </tr>
               </thead>
               <tbody>
@@ -523,6 +733,10 @@ export function BulkUpload({ onAddressSelect, profile, chain, onCloseToLanding }
                     <td>{row.error ? "-" : row.uniqueSenders}</td>
                     <td>{row.error ? "-" : Math.floor(row.walletAgeDays)}</td>
                     <td>{row.error ? "-" : row.gamblingInteractions}</td>
+                    <td className="text-[rgba(255,255,255,0.85)]">{row.whaleMapLabel ?? "—"}</td>
+                    <td className="ui-text-caption text-[rgba(255,255,255,0.5)] max-w-[14rem]">
+                      {row.whaleMapDetail ?? ""}
+                    </td>
                   </tr>
                 ))}
               </tbody>

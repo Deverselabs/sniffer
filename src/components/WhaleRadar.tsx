@@ -1,5 +1,6 @@
 import { Fragment, useState } from "react";
 import type { LensScoreRow, WalletData, WhaleNetworkJob } from "../api";
+import { NEIGHBOR_WINDOW_PRESET_DAYS, neighborWindowSelectKey } from "../utils/whaleNeighborWindowUi";
 import {
   computeWhaleScore,
   INDUSTRY_PROFILES,
@@ -48,14 +49,6 @@ function whaleStatusLabel(status: string): string {
   if (status === "failed") return "Issue";
   if (status === "cancelled") return "Cancelled";
   return status;
-}
-
-const NEIGHBOR_WINDOW_PRESET_DAYS = [1, 2, 3, 5, 7, 15, 30] as const;
-
-function neighborWindowSelectKey(days: number | null): string {
-  if (days === null) return "full";
-  if ((NEIGHBOR_WINDOW_PRESET_DAYS as readonly number[]).includes(days)) return String(days);
-  return "custom";
 }
 
 export function WhaleRadar({

@@ -848,6 +848,7 @@ async def start_whale_network_job(
     telegram_chat_id: str | None = None,
     max_levels: int | None = None,
 ) -> WhaleNetworkJob:
+    await cancel_whale_jobs_for_wallet(chain, address.strip())
     job_id = uuid.uuid4().hex
     tg = (telegram_chat_id or "").strip() or None
     resolved_levels = (
@@ -882,3 +883,19 @@ async def cancel_whale_network_job(job_id: str) -> WhaleNetworkJob | None:
     if job.task and not job.task.done():
         job.task.cancel()
     return job
+
+
+async def cancel_whale_jobs_for_wallet(chain: str, address: str) -> None:
+    """Stop any in-flight whale jobs for the same chain + wallet (new run supersedes old)."""
+    chain_l = chain.strip().lower()
+    want = _visit_key(chain_l, address)
+    async with _JOBS_LOCK:
+        job_ids = [
+            jid
+            for jid, j in _JOBS.items()
+            if j.chain == chain_l
+            and _visit_key(j.chain, j.root_address) == want
+            and j.status in ("queued", "running")
+        ]
+    for jid in job_ids:
+        await cancel_whale_network_job(jid)

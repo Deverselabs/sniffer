@@ -17,6 +17,7 @@ from app.db import get_conn
 from app.services.notify import notify
 from app.services.ethereum import eth_snapshot
 from app.services.lens_scoring import compute_all_lens_scores
+from app.services.scan_result_cache import scan_result_cache_get, scan_result_cache_put
 from app.services.scorer import score
 from app.services.whale_network import (
     cancel_whale_network_job,
@@ -133,17 +134,8 @@ def _normalize_for_score(address: str, deposits: list[Dict[str, Any]]) -> list[D
     return normalized
 
 
-@router.post(
-    "/scan",
-    summary="Scan wallet score",
-    description="Scan a wallet address on ethereum/tron/solana and return score + deposits.",
-)
-async def scan_wallet(body: ScanRequest, background_tasks: BackgroundTasks) -> Dict[str, Any]:
-    address = body.address.strip()
-    chain = body.chain
-    if not validate_address(chain, address):
-        raise HTTPException(status_code=400, detail=f"Invalid {chain} address format")
-
+async def _execute_wallet_scan(address: str, chain: str) -> Dict[str, Any]:
+    """Upstream fetch + score only (no persist, cache, or notify)."""
     try:
         if chain == "ethereum":
             api_key = os.getenv("ETHERSCAN_API_KEY", "").strip()
@@ -178,7 +170,7 @@ async def scan_wallet(body: ScanRequest, background_tasks: BackgroundTasks) -> D
         raise HTTPException(status_code=502, detail=f"{chain} scan failed: {exc}") from exc
 
     eth_price_usd = float(snapshot.get("price_usd", 0) or 0) if chain == "ethereum" else 0.0
-    response_payload = {
+    return {
         "address": address,
         "chain": chain,
         "balance": snapshot["balance"],
@@ -186,8 +178,30 @@ async def scan_wallet(body: ScanRequest, background_tasks: BackgroundTasks) -> D
         "eth_price_usd": eth_price_usd,
         "score": scoring,
     }
+
+
+async def run_wallet_scan(
+    address: str,
+    chain: str,
+    background_tasks: BackgroundTasks | None,
+    *,
+    use_cache: bool = True,
+    do_notify: bool = True,
+) -> Dict[str, Any]:
+    """
+    Full scan path: validation, optional cache hit, persist, optional notify, cache store.
+    background_tasks=None skips Telegram/slack notify scheduling (e.g. batch CSV).
+    """
+    if not validate_address(chain, address):
+        raise HTTPException(status_code=400, detail=f"Invalid {chain} address format")
+    if use_cache:
+        cached = scan_result_cache_get(chain, address)
+        if cached is not None:
+            return cached
+    response_payload = await _execute_wallet_scan(address, chain)
+    scoring = response_payload["score"]
     _persist_scan_result(address, chain, scoring, response_payload)
-    if int(scoring.get("total", 0)) >= 50:
+    if do_notify and int(scoring.get("total", 0)) >= 50 and background_tasks is not None:
         background_tasks.add_task(
             notify,
             {
@@ -198,7 +212,18 @@ async def scan_wallet(body: ScanRequest, background_tasks: BackgroundTasks) -> D
                 "source": "scan",
             },
         )
+    if use_cache:
+        scan_result_cache_put(chain, address, response_payload)
     return response_payload
+
+
+@router.post(
+    "/scan",
+    summary="Scan wallet score",
+    description="Scan a wallet address on ethereum/tron/solana and return score + deposits.",
+)
+async def scan_wallet(body: ScanRequest, background_tasks: BackgroundTasks) -> Dict[str, Any]:
+    return await run_wallet_scan(body.address.strip(), body.chain, background_tasks)
 
 
 @router.post(
@@ -322,21 +347,37 @@ async def batch_scan(file: UploadFile = File(...)) -> Dict[str, Any]:
     if len(rows) > 500:
         raise HTTPException(status_code=400, detail="Maximum 500 rows per batch")
 
+    seen_keys: set[tuple[str, str]] = set()
+    unique_rows: list[dict[str, str]] = []
+    for row in rows:
+        a = row["address"].strip()
+        c = row["chain"]
+        key = (c, a.lower() if c == "ethereum" else a)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        unique_rows.append(row)
+
     semaphore = asyncio.Semaphore(20)
 
     async def run_one(row: dict[str, str]) -> dict[str, Any]:
         async with semaphore:
             try:
-                return await scan_wallet(ScanRequest(address=row["address"], chain=row["chain"]))
+                return await run_wallet_scan(
+                    row["address"].strip(),
+                    row["chain"],
+                    None,
+                    do_notify=False,
+                )
             except Exception as exc:  # noqa: BLE001
                 return {"address": row["address"], "chain": row["chain"], "error": str(exc)}
 
-    tasks = [run_one(row) for row in rows]
+    tasks = [run_one(row) for row in unique_rows]
     results = []
     for result in await asyncio.gather(*tasks):
         results.append(result)
 
-    return {"count": len(results), "results": results}
+    return {"count": len(results), "results": results, "unique_scans": len(unique_rows), "rows_in_file": len(rows)}
 
 
 def _verify_webhook_signature(body_bytes: bytes, signature: str | None) -> bool:
@@ -365,7 +406,7 @@ async def webhook_scan(request: Request, background_tasks: BackgroundTasks) -> D
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Invalid webhook payload: {exc}") from exc
 
-    result = await scan_wallet(ScanRequest(address=payload.sender_wallet, chain=payload.chain), background_tasks)
+    result = await run_wallet_scan(payload.sender_wallet.strip(), payload.chain, background_tasks)
     return {
         "event_id": payload.event_id,
         "webhook_status": "processed",

@@ -34,6 +34,7 @@ function App() {
     error: whaleNetworkError,
     start: startWhaleNetworkScan,
     cancel: cancelWhaleNetworkScan,
+    pausePolling: pauseWhaleNetworkPolling,
   } = whaleNetwork;
 
   const CHAINS = [
@@ -81,12 +82,12 @@ function App() {
 
   useEffect(() => {
     if (!activeData || mode !== "single") {
-      void cancelWhaleNetworkScan();
+      pauseWhaleNetworkPolling();
       return;
     }
     const tg = whaleTelegramForScan.trim();
     if (!tg) {
-      void cancelWhaleNetworkScan();
+      pauseWhaleNetworkPolling();
       return;
     }
     const opts: WhaleNetworkStartOptions = {
@@ -102,7 +103,7 @@ function App() {
     whaleMaxLevels,
     whaleTelegramForScan,
     startWhaleNetworkScan,
-    cancelWhaleNetworkScan,
+    pauseWhaleNetworkPolling,
   ]);
 
   function goBack() {
