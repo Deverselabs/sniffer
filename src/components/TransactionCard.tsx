@@ -30,8 +30,8 @@ export function TransactionCard({
   const token = chain === "tron" ? "TRX" : chain === "solana" ? "SOL" : "ETH";
   return (
     <article className="ui-card-transaction">
-      <div className="ui-row-between items-start">
-        <div className="ui-stack-tight">
+      <div className="ui-row-between items-start gap-3">
+        <div className="ui-stack-tight min-w-0 flex-1">
           <p className="ui-text-body text-[rgba(127,119,221,0.6)]">
             From:{" "}
             <button
@@ -41,11 +41,6 @@ export function TransactionCard({
             >
               {shortAddr(tx.from)}
             </button>
-            {whaleScore !== undefined && (
-              <span className={`ui-badge-row ml-[0.35em] ${scoreBadgeClasses(whaleScore)}`}>
-                {Math.round(whaleScore)}
-              </span>
-            )}
           </p>
           <p className="ui-text-body text-[rgba(255,255,255,0.2)]">
             Tx:{" "}
@@ -60,11 +55,16 @@ export function TransactionCard({
           </p>
         </div>
 
-        <div className="text-right">
-          <p className="font-mono text-[112.5%] font-semibold text-[#5DCAA5]">
-            +{tx.valueEth.toFixed(4)} {token}
-          </p>
-          <p className="ui-text-body mt-[0.25em] text-[rgba(255,255,255,0.15)]">{timeAgo(tx.timestamp)}</p>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
+            {whaleScore !== undefined ? (
+              <span className={`ui-badge-row ${scoreBadgeClasses(whaleScore)}`}>{Math.round(whaleScore)}</span>
+            ) : null}
+            <p className="font-mono text-[112.5%] font-semibold whitespace-nowrap text-[#5DCAA5]">
+              +{tx.valueEth.toFixed(4)} {token}
+            </p>
+          </div>
+          <p className="ui-text-body text-[rgba(255,255,255,0.15)]">{timeAgo(tx.timestamp)}</p>
         </div>
       </div>
     </article>

@@ -17,6 +17,10 @@ type SortMode = "recent" | "amount" | "score";
 
 const SCORE_FETCH_CONCURRENCY = 4;
 
+function senderLookupKey(chain: Chain, address: string): string {
+  return chain === "ethereum" ? address.toLowerCase() : address;
+}
+
 function formatReadableUtc(unixTs: number): string {
   const date = new Date(unixTs * 1000);
   const yyyy = date.getUTCFullYear();
@@ -55,7 +59,7 @@ export function TransactionList({
     const txs = transactionsRef.current;
     if (sortMode !== "score" || txs.length === 0) return;
 
-    const froms = [...new Set(txs.map((t) => t.from))];
+    const froms = [...new Set(txs.map((t) => senderLookupKey(chain, t.from)))];
     const need = froms.filter((f) => !(f in senderScoresRef.current));
     if (need.length === 0) return;
 
@@ -96,13 +100,19 @@ export function TransactionList({
       return copy.sort((a, b) => b.valueEth - a.valueEth);
     }
     if (sortMode === "score") {
-      const rank = (from: string) => {
-        const s = senderScores[from];
-        return s === undefined ? -1 : s;
-      };
+      const scoreOf = (from: string) => senderScores[senderLookupKey(chain, from)];
       return copy.sort((a, b) => {
-        const diff = rank(b.from) - rank(a.from);
-        if (diff !== 0) return diff;
+        const sa = scoreOf(a.from);
+        const sb = scoreOf(b.from);
+        const aMissing = sa === undefined;
+        const bMissing = sb === undefined;
+        if (!aMissing && !bMissing) {
+          if (sb !== sa) return sb - sa;
+        } else if (!aMissing && bMissing) {
+          return -1;
+        } else if (aMissing && !bMissing) {
+          return 1;
+        }
         return b.timestamp - a.timestamp;
       });
     }
@@ -111,7 +121,7 @@ export function TransactionList({
 
   const scorePendingCount = useMemo(() => {
     if (sortMode !== "score" || transactions.length === 0) return 0;
-    const uniqueFrom = new Set(transactions.map((t) => t.from));
+    const uniqueFrom = new Set(transactions.map((t) => senderLookupKey(chain, t.from)));
     return [...uniqueFrom].filter((f) => !(f in senderScores)).length;
   }, [sortMode, transactions, senderScores]);
 
@@ -201,7 +211,11 @@ export function TransactionList({
                   tx={tx}
                   chain={chain}
                   onAddressClick={onAddressClick}
-                  whaleScore={tx.from in senderScores ? senderScores[tx.from] : undefined}
+                  whaleScore={
+                    senderScores[senderLookupKey(chain, tx.from)] !== undefined
+                      ? senderScores[senderLookupKey(chain, tx.from)]
+                      : undefined
+                  }
                 />
               ))}
             </div>

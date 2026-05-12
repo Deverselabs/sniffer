@@ -54,6 +54,21 @@ function whaleStatusLabel(status: string): string {
   return status;
 }
 
+function ordinalLevel(n: number): string {
+  switch (Math.max(1, Math.min(5, Math.floor(n)))) {
+    case 1:
+      return "1st";
+    case 2:
+      return "2nd";
+    case 3:
+      return "3rd";
+    case 4:
+      return "4th";
+    default:
+      return "5th";
+  }
+}
+
 function WhaleMapAddressPath({
   label,
   path,
@@ -234,9 +249,9 @@ export function WhaleRadar({
           <div>
             <p className="ui-whale-status-title">Whale map</p>
             <p className="ui-whale-status-sub">
-              Up to {displayMaxLevels} graph level{displayMaxLevels === 1 ? "" : "s"} from this wallet. Defaults:{" "}
-              <strong className="text-[rgba(175,169,236,0.95)]">5 days</strong> neighbor activity,{" "}
-              <strong className="text-[rgba(175,169,236,0.95)]">2 levels</strong> depth (adjust under Go deeper).
+              {whaleTxWindowDays == null
+                ? `Searching till ${ordinalLevel(whaleMaxLevels)} level for full-history transactions`
+                : `Searching till ${ordinalLevel(whaleMaxLevels)} level for last ${whaleTxWindowDays} ${whaleTxWindowDays === 1 ? "Day" : "Days"} transactions`}
             </p>
           </div>
           {(whaleNetworkJob || whaleNetworkLoading) && (
@@ -249,14 +264,6 @@ export function WhaleRadar({
             </span>
           )}
         </div>
-
-        {!whaleTelegramForScan.trim() && (
-          <p className="ui-whale-status-muted" style={{ marginTop: "0.5rem" }}>
-            Whale map starts automatically for this wallet; progress and results appear below. Telegram alerts use the
-            server <code className="text-[rgba(175,169,236,0.9)]">TELEGRAM_CHAT_ID</code> when it is configured. Under{" "}
-            <strong>Go deeper</strong> you can optionally add a second chat id to notify that destination too.
-          </p>
-        )}
 
         {whaleNetworkError && <p className="ui-whale-status-error">{whaleNetworkError}</p>}
 
@@ -355,7 +362,7 @@ export function WhaleRadar({
       </section>
 
       <details className="ui-surface ui-card ui-whale-scan-further">
-        <summary className="ui-whale-scan-further-summary">Go deeper — time range, search depth &amp; Telegram</summary>
+        <summary className="ui-whale-scan-further-summary">Go deeper — time range &amp; search depth</summary>
         <div className="ui-whale-scan-further-body">
           <label className="ui-whale-field-label">Neighbor activity window</label>
           <select
