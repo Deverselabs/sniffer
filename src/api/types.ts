@@ -22,6 +22,7 @@ export interface WhaleNetworkJob {
   processed_wallets: number;
   skipped_wallets?: number;
   upstream_retries?: number;
+  wallet_cache_hits?: number;
   queued_wallets: number;
   scanned_levels: number;
   whale_found: boolean;

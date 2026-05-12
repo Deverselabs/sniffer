@@ -235,6 +235,11 @@ export function WhaleRadar({
                 Slow upstream — retried {whaleNetworkJob.upstream_retries} time(s); nothing skipped.
               </p>
             )}
+            {(whaleNetworkJob.wallet_cache_hits ?? 0) > 0 && (
+              <p className="ui-whale-status-muted">
+                Reused {whaleNetworkJob.wallet_cache_hits} wallet scan(s) — same on-chain activity tip as last time.
+              </p>
+            )}
             {whaleNetworkJob.status === "failed" && whaleNetworkJob.error && (
               <p className="ui-whale-status-error">{whaleNetworkJob.error}</p>
             )}

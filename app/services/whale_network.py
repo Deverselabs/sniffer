@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import re
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -17,6 +18,12 @@ from app.services.notify import send_telegram_text
 from app.services.scorer import score
 from app.services.solana import SolanaServiceError, sol_balance, sol_deposits
 from app.services.tron import TronServiceError, tron_balance, tron_deposits
+from app.services.whale_wallet_cache_store import (
+    WhaleWalletCacheRow,
+    whale_wallet_cache_durable_enabled,
+    whale_wallet_cache_get,
+    whale_wallet_cache_put,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +42,7 @@ _SOL_CONCURRENCY_DEFAULT = 4
 _FRONTIER_CHUNK_SIZE = 48
 _DEFAULT_SCANS_PER_SEC = 3.0
 _DEFAULT_MAX_RETRIES = 50
+_DEFAULT_WALLET_CACHE_MAX = 5000
 
 
 class AsyncRateLimiter:
@@ -151,6 +159,7 @@ class WhaleNetworkJob:
     whale_score: int | None = None
     whale_level: int | None = None
     error: str | None = None
+    wallet_cache_hits: int = 0
     created_at: str = field(default_factory=_iso_now)
     updated_at: str = field(default_factory=_iso_now)
     completed_at: str | None = None
@@ -176,6 +185,7 @@ class WhaleNetworkJob:
             "whale_score": self.whale_score,
             "whale_level": self.whale_level,
             "error": self.error,
+            "wallet_cache_hits": self.wallet_cache_hits,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "completed_at": self.completed_at,
@@ -184,6 +194,254 @@ class WhaleNetworkJob:
 
 _JOBS: dict[str, WhaleNetworkJob] = {}
 _JOBS_LOCK = asyncio.Lock()
+
+# L1 in-process cache + optional L2 Postgres (see WHALE_NETWORK_WALLET_CACHE_DURABLE).
+# Cross-job cache: reuse score+neighbors when tip (fingerprint + tx hash + block) matches and row is within TTL.
+_wallet_scan_cache: dict[str, "WalletScanCacheEntry"] = {}
+_wallet_scan_cache_lock = asyncio.Lock()
+
+
+@dataclass(frozen=True)
+class TipMeta:
+    fingerprint: str
+    tip_tx_hash: str
+    tip_ts: int
+    tip_block: int | None
+
+
+@dataclass
+class WalletScanCacheEntry:
+    score: int
+    neighbors: list[str]
+    tip: TipMeta
+    stored_wall: float
+
+
+def _wallet_cache_enabled() -> bool:
+    raw = os.getenv("WHALE_NETWORK_WALLET_CACHE", "1").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
+def _wallet_cache_max_entries() -> int:
+    raw = os.getenv("WHALE_NETWORK_WALLET_CACHE_MAX", str(_DEFAULT_WALLET_CACHE_MAX)).strip()
+    try:
+        n = int(raw)
+    except ValueError:
+        n = _DEFAULT_WALLET_CACHE_MAX
+    return max(100, min(100_000, n))
+
+
+def _wallet_cache_ttl_sec() -> int:
+    """0 = no max-age ceiling (tip match only)."""
+    raw = os.getenv("WHALE_NETWORK_WALLET_CACHE_TTL_SEC", "1800").strip()
+    try:
+        v = int(raw)
+    except ValueError:
+        v = 1800
+    return max(0, min(7 * 24 * 3600, v))
+
+
+def _wallet_cache_key(chain: str, wallet: str, tx_window_days: int | None) -> str:
+    wk = _visit_key(chain, wallet)
+    tw = "full" if tx_window_days is None else str(int(tx_window_days))
+    return f"{chain.lower()}:{wk}:{tw}"
+
+
+def _tx_window_segment(tx_window_days: int | None) -> str:
+    return "full" if tx_window_days is None else str(int(tx_window_days))
+
+
+def _cache_ttl_expired_wall(stored_wall: float, ttl_sec: int) -> bool:
+    if ttl_sec <= 0:
+        return False
+    return (time.time() - stored_wall) > ttl_sec
+
+
+def _cache_ttl_expired_db(updated_at: datetime, ttl_sec: int) -> bool:
+    if ttl_sec <= 0:
+        return False
+    now = datetime.now(timezone.utc)
+    ua = updated_at if updated_at.tzinfo else updated_at.replace(tzinfo=timezone.utc)
+    return (now - ua).total_seconds() > ttl_sec
+
+
+def _tip_matches_stored(
+    tip: TipMeta,
+    *,
+    fingerprint: str,
+    tip_tx_hash: str,
+    tip_block: int | None,
+) -> bool:
+    if fingerprint != tip.fingerprint:
+        return False
+    if tip_tx_hash != tip.tip_tx_hash:
+        return False
+    if tip_block is not None and tip.tip_block is not None and tip_block != tip.tip_block:
+        return False
+    return True
+
+
+def _db_row_tip_matches(tip: TipMeta, row: WhaleWalletCacheRow) -> bool:
+    return _tip_matches_stored(
+        tip,
+        fingerprint=row.fingerprint,
+        tip_tx_hash=row.tip_tx_hash,
+        tip_block=row.tip_block,
+    )
+
+
+def _eth_txlist_tip_meta(txs: list[dict[str, Any]]) -> TipMeta:
+    if not txs:
+        return TipMeta(fingerprint="empty", tip_tx_hash="", tip_ts=0, tip_block=None)
+    t0 = txs[0]
+    h = str(t0.get("hash", "")).lower()
+    try:
+        ts = int(t0.get("timeStamp", 0) or 0)
+    except (TypeError, ValueError):
+        ts = 0
+    blk: int | None = None
+    try:
+        br = t0.get("blockNumber", "")
+        if br != "" and br is not None:
+            blk = int(br)
+    except (TypeError, ValueError):
+        blk = None
+    fp = f"{t0.get('timeStamp', '')}:{h}:{len(txs)}"
+    return TipMeta(fingerprint=fp, tip_tx_hash=h, tip_ts=ts, tip_block=blk)
+
+
+def _tron_deposit_tip_meta(deposits: list[Dict[str, Any]]) -> TipMeta:
+    if not deposits:
+        return TipMeta(fingerprint="empty", tip_tx_hash="", tip_ts=0, tip_block=None)
+    row = deposits[0]
+    h = str(row.get("hash", ""))
+    ts = int(row.get("timestamp", 0) or 0)
+    fp = f"{ts}:{h}:{len(deposits)}"
+    return TipMeta(fingerprint=fp, tip_tx_hash=h, tip_ts=ts, tip_block=None)
+
+
+def _sol_deposit_tip_meta(deposits: list[Dict[str, Any]]) -> TipMeta:
+    if not deposits:
+        return TipMeta(fingerprint="empty", tip_tx_hash="", tip_ts=0, tip_block=None)
+    sorted_rows = sorted(deposits, key=lambda r: int(r.get("timestamp", 0) or 0), reverse=True)
+    row = sorted_rows[0]
+    h = str(row.get("hash", ""))
+    ts = int(row.get("timestamp", 0) or 0)
+    fp = f"{ts}:{h}:{len(deposits)}"
+    return TipMeta(fingerprint=fp, tip_tx_hash=h, tip_ts=ts, tip_block=None)
+
+
+async def _activity_tip_probe(address: str, chain: str, *, tx_window_days: int | None = None) -> TipMeta:
+    c = chain.lower()
+    if c == "ethereum":
+        api_key = os.getenv("ETHERSCAN_API_KEY", "").strip()
+        if not api_key:
+            raise RuntimeError("Missing ETHERSCAN_API_KEY")
+        txs = await _etherscan_txlist(address, api_key)
+        return _eth_txlist_tip_meta(txs)
+    if c == "tron":
+        tron_key = os.getenv("TRONGRID_API_KEY", "").strip() or None
+        if not tron_key:
+            raise RuntimeError("Missing TRONGRID_API_KEY")
+        deposits = await tron_deposits(address, tron_key)
+        return _tron_deposit_tip_meta(deposits)
+    if c == "solana":
+        deposits = await sol_deposits(address)
+        return _sol_deposit_tip_meta(deposits)
+    raise RuntimeError(f"Unsupported chain: {chain}")
+
+
+def _wallet_cache_evict_if_needed() -> None:
+    cap = _wallet_cache_max_entries()
+    if len(_wallet_scan_cache) <= cap:
+        return
+    drop = max(1, len(_wallet_scan_cache) // 5)
+    oldest = sorted(_wallet_scan_cache.items(), key=lambda kv: kv[1].stored_wall)[:drop]
+    for k, _ in oldest:
+        del _wallet_scan_cache[k]
+
+
+async def _wallet_snapshot_and_score_cached(
+    address: str,
+    chain: str,
+    *,
+    tx_window_days: int | None,
+    job: WhaleNetworkJob | None = None,
+) -> tuple[int, list[str]]:
+    if not _wallet_cache_enabled():
+        s, n, _tip = await _wallet_snapshot_and_score(address, chain, tx_window_days=tx_window_days)
+        return s, n
+
+    chain_l = chain.lower()
+    addr_key = _visit_key(chain, address)
+    tw = _tx_window_segment(tx_window_days)
+    ttl = _wallet_cache_ttl_sec()
+    mem_key = _wallet_cache_key(chain, address, tx_window_days)
+
+    tip_now = await _activity_tip_probe(address, chain_l, tx_window_days=tx_window_days)
+
+    if whale_wallet_cache_durable_enabled():
+        try:
+            row = await asyncio.to_thread(whale_wallet_cache_get, chain_l, addr_key, tw)
+        except Exception:
+            row = None
+            logger.exception("Whale durable cache read failed")
+        if row is not None:
+            if not _cache_ttl_expired_db(row.updated_at, ttl) and _db_row_tip_matches(tip_now, row):
+                if job is not None:
+                    job.wallet_cache_hits += 1
+                logger.debug("Whale wallet cache hit (postgres) %s/%s/%s", chain_l, addr_key[:10], tw)
+                return row.score, list(row.neighbors)
+
+    async with _wallet_scan_cache_lock:
+        ent = _wallet_scan_cache.get(mem_key)
+        if ent is not None and not _cache_ttl_expired_wall(ent.stored_wall, ttl) and _tip_matches_stored(
+            tip_now,
+            fingerprint=ent.tip.fingerprint,
+            tip_tx_hash=ent.tip.tip_tx_hash,
+            tip_block=ent.tip.tip_block,
+        ):
+            if job is not None:
+                job.wallet_cache_hits += 1
+            logger.debug("Whale wallet cache hit (memory) %s", mem_key)
+            return ent.score, list(ent.neighbors)
+
+    score, neighbors, tip_full = await _wallet_snapshot_and_score(address, chain, tx_window_days=tx_window_days)
+    if tip_full.fingerprint != tip_now.fingerprint or tip_full.tip_tx_hash != tip_now.tip_tx_hash:
+        logger.info(
+            "Whale wallet cache tip drift during scan key=%s probe=%s full=%s",
+            mem_key,
+            tip_now,
+            tip_full,
+        )
+
+    if whale_wallet_cache_durable_enabled():
+        try:
+            await asyncio.to_thread(
+                whale_wallet_cache_put,
+                chain_l,
+                addr_key,
+                tw,
+                tip_full.fingerprint,
+                tip_full.tip_tx_hash,
+                tip_full.tip_ts,
+                tip_full.tip_block,
+                score,
+                neighbors,
+            )
+        except Exception:
+            logger.exception("Whale durable cache write failed")
+
+    async with _wallet_scan_cache_lock:
+        _wallet_scan_cache[mem_key] = WalletScanCacheEntry(
+            score=score,
+            neighbors=list(neighbors),
+            tip=tip_full,
+            stored_wall=time.time(),
+        )
+        _wallet_cache_evict_if_needed()
+
+    return score, neighbors
 
 
 def _normalize_for_score(deposits: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
@@ -285,13 +543,16 @@ async def _wallet_snapshot_and_score(
     chain: str,
     *,
     tx_window_days: int | None,
-) -> tuple[int, list[str]]:
+) -> tuple[int, list[str], TipMeta]:
     cutoff_ts = _neighbor_cutoff_timestamp(tx_window_days)
     chain = chain.lower()
     if chain == "ethereum":
         api_key = os.getenv("ETHERSCAN_API_KEY", "").strip()
         if not api_key:
             raise RuntimeError("Missing ETHERSCAN_API_KEY")
+        txs = await _etherscan_txlist(address, api_key)
+        tip = _eth_txlist_tip_meta(txs)
+        neighbors = _eth_neighbors(address, txs, cutoff_ts=cutoff_ts)
         snapshot = await eth_snapshot(address, api_key)
         normalized = _normalize_for_score(snapshot["deposits"])
         scoring = score(
@@ -300,9 +561,7 @@ async def _wallet_snapshot_and_score(
             balance_eth=float(snapshot["balance"]),
             eth_price_usd=float(snapshot.get("price_usd", 0) or 0),
         )
-        txs = await _etherscan_txlist(address, api_key)
-        neighbors = _eth_neighbors(address, txs, cutoff_ts=cutoff_ts)
-        return int(scoring.get("total", 0)), neighbors
+        return int(scoring.get("total", 0)), neighbors, tip
 
     if chain == "tron":
         tron_key = os.getenv("TRONGRID_API_KEY", "").strip() or None
@@ -310,19 +569,21 @@ async def _wallet_snapshot_and_score(
             raise RuntimeError("Missing TRONGRID_API_KEY")
         bal = await tron_balance(address, tron_key)
         deposits = await tron_deposits(address, tron_key)
+        tip = _tron_deposit_tip_meta(deposits)
         normalized = _normalize_for_score(deposits)
         scoring = score(address, txlist=normalized, balance_eth=bal, eth_price_usd=0)
         neighbors = _tron_neighbors_from_deposits(deposits, cutoff_ts=cutoff_ts)
-        return int(scoring.get("total", 0)), neighbors
+        return int(scoring.get("total", 0)), neighbors, tip
 
     if chain == "solana":
         bal = await sol_balance(address)
         deposits = await sol_deposits(address)
         deposits.sort(key=lambda r: int(r.get("timestamp", 0) or 0), reverse=True)
+        tip = _sol_deposit_tip_meta(deposits)
         normalized = _normalize_for_score(deposits)
         scoring = score(address, txlist=normalized, balance_eth=bal, eth_price_usd=0)
         neighbors = _sol_neighbors_from_deposits(deposits, cutoff_ts=cutoff_ts)
-        return int(scoring.get("total", 0)), neighbors
+        return int(scoring.get("total", 0)), neighbors, tip
 
     raise RuntimeError(f"Unsupported chain: {chain}")
 
@@ -376,10 +637,11 @@ async def _run_job(job_id: str) -> None:
                         raise asyncio.CancelledError()
                     await rate.acquire()
                     try:
-                        score, neighbors = await _wallet_snapshot_and_score(
+                        score, neighbors = await _wallet_snapshot_and_score_cached(
                             wallet,
                             job.chain,
                             tx_window_days=job.tx_window_days,
+                            job=job,
                         )
                         return wallet, int(score), neighbors
                     except asyncio.CancelledError:
