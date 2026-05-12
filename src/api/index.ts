@@ -86,16 +86,17 @@ export async function fetchRecentAlerts(): Promise<AlertsRecentResponse> {
 export async function startWhaleNetworkScan(
   address: string,
   chain: Chain,
-  options?: WhaleNetworkStartOptions | null
+  options: WhaleNetworkStartOptions
 ): Promise<WhaleNetworkJob> {
-  const body: Record<string, unknown> = { address, chain };
-  if (options?.tx_window_days !== undefined) {
+  const body: Record<string, unknown> = {
+    address,
+    chain,
+    telegram_chat_id: options.telegram_chat_id.trim(),
+  };
+  if (options.tx_window_days !== undefined) {
     body.tx_window_days = options.tx_window_days;
   }
-  if (options?.telegram_chat_id) {
-    body.telegram_chat_id = options.telegram_chat_id;
-  }
-  if (options?.max_levels !== undefined && options.max_levels !== null) {
+  if (options.max_levels !== undefined && options.max_levels !== null) {
     body.max_levels = options.max_levels;
   }
   const res = await axios.post<WhaleNetworkJob>(`${API_BASE}/api/v1/whale-network/start`, body);

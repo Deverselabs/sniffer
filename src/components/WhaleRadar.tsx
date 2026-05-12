@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useState } from "react";
 import type { LensScoreRow, WalletData, WhaleNetworkJob } from "../api";
 import {
   computeWhaleScore,
@@ -18,7 +18,7 @@ interface WhaleRadarProps {
   whaleMaxLevels: number;
   onWhaleMaxLevelsChange: (levels: number) => void;
   whaleTelegramForScan: string;
-  onApplyWhaleTelegram: (trimmed: string) => void;
+  onWhaleTelegramForScanChange: (value: string) => void;
   whaleNetworkJob: WhaleNetworkJob | null;
   whaleNetworkLoading: boolean;
   whaleNetworkError: string | null;
@@ -50,6 +50,14 @@ function whaleStatusLabel(status: string): string {
   return status;
 }
 
+const NEIGHBOR_WINDOW_PRESET_DAYS = [1, 2, 3, 5, 7, 15, 30] as const;
+
+function neighborWindowSelectKey(days: number | null): string {
+  if (days === null) return "full";
+  if ((NEIGHBOR_WINDOW_PRESET_DAYS as readonly number[]).includes(days)) return String(days);
+  return "custom";
+}
+
 export function WhaleRadar({
   data,
   profile,
@@ -62,18 +70,13 @@ export function WhaleRadar({
   whaleMaxLevels,
   onWhaleMaxLevelsChange,
   whaleTelegramForScan,
-  onApplyWhaleTelegram,
+  onWhaleTelegramForScanChange,
   whaleNetworkJob,
   whaleNetworkLoading,
   whaleNetworkError,
   onCancelWhaleNetworkScan,
 }: WhaleRadarProps) {
   const [showOtherLenses, setShowOtherLenses] = useState(false);
-  const [tgDraft, setTgDraft] = useState(whaleTelegramForScan);
-
-  useEffect(() => {
-    setTgDraft(whaleTelegramForScan);
-  }, [whaleTelegramForScan, data.address, data.chain]);
 
   const score = computeWhaleScore(data, profile);
   const selectedProfile = INDUSTRY_PROFILES[profile];
@@ -202,8 +205,7 @@ export function WhaleRadar({
           <div>
             <p className="ui-whale-status-title">Whale map</p>
             <p className="ui-whale-status-sub">
-              Up to {displayMaxLevels} graph level{displayMaxLevels === 1 ? "" : "s"} from this wallet · same rules as
-              the graph scan
+              Up to {displayMaxLevels} graph level{displayMaxLevels === 1 ? "" : "s"} from this wallet
             </p>
           </div>
           {(whaleNetworkJob || whaleNetworkLoading) && (
@@ -216,6 +218,12 @@ export function WhaleRadar({
             </span>
           )}
         </div>
+
+        {!whaleTelegramForScan.trim() && (
+          <p className="ui-whale-status-muted" style={{ marginTop: "0.5rem" }}>
+            Enter your Telegram chat id under Go deeper to start the whale map.
+          </p>
+        )}
 
         {whaleNetworkError && <p className="ui-whale-status-error">{whaleNetworkError}</p>}
 
@@ -275,17 +283,63 @@ export function WhaleRadar({
           <label className="ui-whale-field-label">Neighbor activity window</label>
           <select
             className="ui-whale-field-control"
-            value={whaleTxWindowDays === null ? "full" : String(whaleTxWindowDays)}
+            value={neighborWindowSelectKey(whaleTxWindowDays)}
             onChange={(e) => {
               const v = e.target.value;
-              onWhaleTxWindowDaysChange(v === "full" ? null : Number(v));
+              if (v === "full") {
+                onWhaleTxWindowDaysChange(null);
+              } else if (v === "custom") {
+                const cur = whaleTxWindowDays;
+                if (
+                  cur != null &&
+                  cur >= 1 &&
+                  cur <= 90 &&
+                  !(NEIGHBOR_WINDOW_PRESET_DAYS as readonly number[]).includes(cur)
+                ) {
+                  onWhaleTxWindowDaysChange(cur);
+                } else if (cur != null && cur >= 1 && cur <= 90) {
+                  onWhaleTxWindowDaysChange(10);
+                } else {
+                  onWhaleTxWindowDaysChange(14);
+                }
+              } else {
+                onWhaleTxWindowDaysChange(Number(v));
+              }
             }}
             aria-label="Transaction window for neighbor discovery"
           >
+            <option value="1">Last 1 day</option>
+            <option value="2">Last 2 days</option>
+            <option value="3">Last 3 days</option>
+            <option value="5">Last 5 days</option>
+            <option value="7">Last 7 days</option>
             <option value="15">Last 15 days</option>
             <option value="30">Last 30 days</option>
+            <option value="custom">Custom (1–90 days)</option>
             <option value="full">Full history</option>
           </select>
+          {neighborWindowSelectKey(whaleTxWindowDays) === "custom" && (
+            <>
+              <label className="ui-whale-field-label ui-mt-tight" htmlFor="whale-neighbor-custom-days">
+                Custom days (1–90)
+              </label>
+              <input
+                id="whale-neighbor-custom-days"
+                type="number"
+                min={1}
+                max={90}
+                step={1}
+                className="ui-whale-field-control"
+                value={whaleTxWindowDays != null ? whaleTxWindowDays : 14}
+                onChange={(e) => {
+                  const raw = parseInt(e.target.value, 10);
+                  if (!Number.isFinite(raw)) return;
+                  onWhaleTxWindowDaysChange(Math.max(1, Math.min(90, raw)));
+                }}
+                aria-label="Custom neighbor window in days"
+              />
+            </>
+          )}
           <label className="ui-whale-field-label ui-mt-tight">Search depth (graph levels)</label>
           <select
             className="ui-whale-field-control"
@@ -299,26 +353,17 @@ export function WhaleRadar({
             <option value="4">4 levels</option>
             <option value="5">5 levels</option>
           </select>
-          <p className="ui-whale-hint">
-            Deeper scans use more API quota. Free tiers often need 1–2 levels.
-          </p>
-          <label className="ui-whale-field-label ui-mt-tight">Telegram (optional)</label>
+          <label className="ui-whale-field-label ui-mt-tight">Telegram</label>
           <input
             type="text"
             className="ui-whale-field-control"
-            placeholder="Channel id, e.g. -100…"
-            value={tgDraft}
-            onChange={(e) => setTgDraft(e.target.value)}
-            aria-label="Telegram chat or channel id"
+            placeholder="Chat or channel id, e.g. -100…"
+            value={whaleTelegramForScan}
+            onChange={(e) => onWhaleTelegramForScanChange(e.target.value)}
+            aria-label="Telegram chat or channel id (required)"
             autoComplete="off"
+            required
           />
-          <p className="ui-whale-hint">
-            Server needs <code className="text-[rgba(200,190,255,0.85)]">TELEGRAM_BOT_TOKEN</code>. Bot must be an
-            admin in the channel.
-          </p>
-          <button type="button" className="ui-btn ui-btn--ghost" onClick={() => onApplyWhaleTelegram(tgDraft.trim())}>
-            Apply &amp; restart scan
-          </button>
         </div>
       </details>
     </Fragment>

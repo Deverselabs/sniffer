@@ -29,12 +29,20 @@ function resumeStorageKey(
   address: string,
   chain: Chain,
   txWindowDays: number | null,
-  maxLevels: number
+  maxLevels: number,
+  telegramChatId: string,
 ): string {
   const trimmed = address.trim();
   const normalized = chain === "ethereum" ? trimmed.toLowerCase() : trimmed;
   const w = txWindowDays === null ? "full" : String(txWindowDays);
-  return `sniffer:whale_network:${chain}:${normalized}:${w}:d${maxLevels}`;
+  const tg = telegramChatId.trim();
+  let h = 2166136261;
+  for (let i = 0; i < tg.length; i += 1) {
+    h ^= tg.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const tgSeg = (h >>> 0).toString(36);
+  return `sniffer:whale_network:${chain}:${normalized}:${w}:d${maxLevels}:tg${tgSeg}`;
 }
 
 function jobMaxLevels(job: WhaleNetworkJob): number {
@@ -142,9 +150,17 @@ export function useWhaleNetworkScan() {
 
   const start = useCallback(
     async (address: string, chain: Chain, opts?: WhaleNetworkStartOptions | null) => {
+      const tg = (opts?.telegram_chat_id ?? "").trim();
+      if (!tg) {
+        clearPoll();
+        activeJobIdRef.current = null;
+        activeResumeKeyRef.current = null;
+        setState({ job: null, loading: false, error: null });
+        return;
+      }
       const txw = resolvedTxWindow(opts);
       const maxLv = resolvedMaxLevels(opts);
-      const key = resumeStorageKey(address, chain, txw, maxLv);
+      const key = resumeStorageKey(address, chain, txw, maxLv, tg);
       clearPoll();
 
       if (activeResumeKeyRef.current !== null && activeResumeKeyRef.current !== key) {
@@ -202,12 +218,10 @@ export function useWhaleNetworkScan() {
       try {
         const apiOpts: WhaleNetworkStartOptions = {
           max_levels: resolvedMaxLevels(opts),
+          telegram_chat_id: tg,
         };
         if (opts?.tx_window_days !== undefined) {
           apiOpts.tx_window_days = opts.tx_window_days;
-        }
-        if (opts?.telegram_chat_id) {
-          apiOpts.telegram_chat_id = opts.telegram_chat_id;
         }
         const job = await startWhaleNetworkScan(address, chain, apiOpts);
         adoptJob(job, key);

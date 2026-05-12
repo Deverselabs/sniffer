@@ -62,10 +62,11 @@ class WhaleNetworkStartRequest(BaseModel):
             "BFS graph depth (root = level 0). 1–5. Omit to use server default WHALE_NETWORK_MAX_LEVEL."
         ),
     )
-    telegram_chat_id: str | None = Field(
-        default=None,
+    telegram_chat_id: str = Field(
+        ...,
+        min_length=1,
         max_length=80,
-        description="Telegram chat or channel id for progress and result messages (requires TELEGRAM_BOT_TOKEN).",
+        description="Telegram chat or channel id for whale map progress and results.",
     )
 
     @field_validator("tx_window_days")
@@ -79,11 +80,13 @@ class WhaleNetworkStartRequest(BaseModel):
 
     @field_validator("telegram_chat_id", mode="before")
     @classmethod
-    def normalize_telegram(cls, v: object) -> str | None:
+    def normalize_telegram(cls, v: object) -> str:
         if v is None:
-            return None
+            raise ValueError("telegram_chat_id is required")
         s = str(v).strip()
-        return s or None
+        if not s:
+            raise ValueError("telegram_chat_id is required")
+        return s
 
 
 class WebhookRequest(BaseModel):
@@ -227,8 +230,8 @@ async def lens_scores(body: LensScoresRequest) -> Dict[str, Any]:
     summary="Start whale network scan job",
     description=(
         "Start background BFS scan up to max_levels (1–5) or server default. Neighbors come from "
-        "counterparties in recent transactions (tx_window_days, or full history when null). Optional "
-        "telegram_chat_id sends updates when TELEGRAM_BOT_TOKEN is set."
+        "counterparties in recent transactions (tx_window_days, or full history when null). "
+        "telegram_chat_id is required for notifications and scan coordination."
     ),
 )
 async def whale_network_start(body: WhaleNetworkStartRequest) -> Dict[str, Any]:

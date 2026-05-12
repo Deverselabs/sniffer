@@ -238,7 +238,7 @@ async def test_whale_network_endpoints(monkeypatch):
                 "root_address": "0xd8da6bf26964af9d7eed9e03e53415d37aa96045",
                 "chain": "ethereum",
                 "tx_window_days": 30,
-                "telegram_notifications": False,
+                "telegram_notifications": True,
                 "status": self.status,
                 "progress": "ok",
                 "processed_wallets": 1,
@@ -274,7 +274,11 @@ async def test_whale_network_endpoints(monkeypatch):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         start_res = await client.post(
             "/api/v1/whale-network/start",
-            json={"address": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", "chain": "ethereum"},
+            json={
+                "address": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+                "chain": "ethereum",
+                "telegram_chat_id": "-1001234567890",
+            },
         )
         assert start_res.status_code == 200
         job_id = start_res.json()["job_id"]
@@ -294,7 +298,19 @@ def test_whale_network_start_request_max_levels_range():
     from app.api.v1 import WhaleNetworkStartRequest
 
     addr = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
-    m = WhaleNetworkStartRequest(address=addr, chain="ethereum", max_levels=5)
+    m = WhaleNetworkStartRequest(address=addr, chain="ethereum", max_levels=5, telegram_chat_id="-1001")
     assert m.max_levels == 5
     with pytest.raises(ValidationError):
-        WhaleNetworkStartRequest(address=addr, chain="ethereum", max_levels=6)
+        WhaleNetworkStartRequest(address=addr, chain="ethereum", max_levels=6, telegram_chat_id="-1001")
+
+
+def test_whale_network_start_request_requires_telegram():
+    from pydantic import ValidationError
+
+    from app.api.v1 import WhaleNetworkStartRequest
+
+    addr = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
+    with pytest.raises(ValidationError):
+        WhaleNetworkStartRequest(address=addr, chain="ethereum")
+    with pytest.raises(ValidationError):
+        WhaleNetworkStartRequest(address=addr, chain="ethereum", telegram_chat_id="   ")

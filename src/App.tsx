@@ -84,12 +84,16 @@ function App() {
       void cancelWhaleNetworkScan();
       return;
     }
+    const tg = whaleTelegramForScan.trim();
+    if (!tg) {
+      void cancelWhaleNetworkScan();
+      return;
+    }
     const opts: WhaleNetworkStartOptions = {
       tx_window_days: whaleTxWindowDays,
       max_levels: whaleMaxLevels,
+      telegram_chat_id: tg,
     };
-    const tg = whaleTelegramForScan.trim();
-    if (tg) opts.telegram_chat_id = tg;
     void startWhaleNetworkScan(activeData.address, activeData.chain, opts);
   }, [
     activeData,
@@ -339,7 +343,7 @@ function App() {
                     whaleMaxLevels={whaleMaxLevels}
                     onWhaleMaxLevelsChange={setWhaleMaxLevels}
                     whaleTelegramForScan={whaleTelegramForScan}
-                    onApplyWhaleTelegram={(trimmed) => setWhaleTelegramForScan(trimmed)}
+                    onWhaleTelegramForScanChange={setWhaleTelegramForScan}
                     whaleNetworkJob={whaleNetworkJob}
                     whaleNetworkLoading={whaleNetworkLoading}
                     whaleNetworkError={whaleNetworkError}

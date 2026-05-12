@@ -42,7 +42,8 @@ export interface WhaleNetworkStartOptions {
   tx_window_days?: number | null;
   /** BFS depth 1–5 (root = level 0). Omit to use server default. */
   max_levels?: number | null;
-  telegram_chat_id?: string | null;
+  /** Required. Telegram chat or channel id for this scan. */
+  telegram_chat_id: string;
 }
 
 export interface Transaction {
