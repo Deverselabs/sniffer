@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 
 from app.db import get_conn
+
+logger = logging.getLogger(__name__)
 
 
 async def _post_json(url: str, payload: dict[str, Any], timeout: int = 10) -> None:
@@ -36,9 +40,36 @@ async def send_telegram_text(text: str, *, chat_id: str | None = None) -> bool:
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.post(url, json={"chat_id": cid, "text": safe})
+        if response.status_code != 200:
+            logger.warning(
+                "Telegram sendMessage HTTP %s for chat_id …%s: %s",
+                response.status_code,
+                cid[-8:],
+                response.text[:300],
+            )
         return response.status_code == 200
-    except (httpx.RequestError, ValueError):
+    except (httpx.RequestError, ValueError) as exc:
+        logger.warning("Telegram sendMessage request error for chat_id …%s: %s", cid[-8:], exc)
         return False
+
+
+async def send_telegram_text_to_chats(text: str, *, chat_ids: Iterable[str]) -> None:
+    """
+    Send the same text to each distinct non-empty chat_id.
+    Each destination is tried independently; one failure does not block others.
+    """
+    seen: set[str] = set()
+    for raw in chat_ids:
+        cid = (raw or "").strip()
+        if not cid or cid in seen:
+            continue
+        seen.add(cid)
+        try:
+            ok = await send_telegram_text(text, chat_id=cid)
+            if not ok:
+                logger.warning("Telegram sendMessage returned failure for chat_id …%s", cid[-8:])
+        except Exception:  # noqa: BLE001
+            logger.exception("Telegram sendMessage raised for chat_id …%s", cid[-8:])
 
 
 async def _send_telegram(text: str) -> None:

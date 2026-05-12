@@ -14,7 +14,7 @@ import httpx
 
 from app.services.ethereum import EthereumServiceError, eth_snapshot
 from app.services.http_client import UpstreamHTTPError, get_json_with_retry
-from app.services.notify import send_telegram_text
+from app.services.notify import send_telegram_text_to_chats
 from app.services.scorer import score
 from app.services.solana import SolanaServiceError, sol_balance, sol_deposits
 from app.services.tron import TronServiceError, tron_balance, tron_deposits
@@ -600,14 +600,27 @@ async def _wallet_snapshot_and_score(
     raise RuntimeError(f"Unsupported chain: {chain}")
 
 
+def _whale_telegram_recipients(job: WhaleNetworkJob) -> list[str]:
+    """UI chat id first, then TELEGRAM_CHAT_ID if set and distinct (no duplicate sends)."""
+    ui = (job.telegram_chat_id or "").strip()
+    env = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    out: list[str] = []
+    if ui:
+        out.append(ui)
+    if env and env not in out:
+        out.append(env)
+    return out
+
+
 async def _telegram_safe(job: WhaleNetworkJob, text: str) -> None:
-    cid = (job.telegram_chat_id or "").strip()
-    if not cid:
+    """Notify UI-configured chat and env default chat; failures are isolated and never raise."""
+    targets = _whale_telegram_recipients(job)
+    if not targets:
         return
     try:
-        await send_telegram_text(text, chat_id=cid)
+        await send_telegram_text_to_chats(text, chat_ids=targets)
     except Exception:  # noqa: BLE001
-        logger.exception("Whale network Telegram send failed")
+        logger.exception("Whale network Telegram broadcast failed unexpectedly")
 
 
 async def _run_job(job_id: str) -> None:
