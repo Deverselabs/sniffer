@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { LensScoreRow, WalletData, WhaleNetworkJob } from "../api";
 import {
   computeWhaleScore,
@@ -38,6 +38,14 @@ function progressFillStyle(score: number): { width: string; background: string }
   if (score >= 50) return { width: w, background: "rgb(59, 130, 246)" };
   if (score >= 30) return { width: w, background: "rgb(245, 158, 11)" };
   return { width: w, background: "rgb(239, 68, 68)" };
+}
+
+function whaleStatusLabel(status: string): string {
+  if (status === "running" || status === "queued") return "Scanning";
+  if (status === "completed") return "Done";
+  if (status === "failed") return "Issue";
+  if (status === "cancelled") return "Cancelled";
+  return status;
 }
 
 export function WhaleRadar({
@@ -81,8 +89,9 @@ export function WhaleRadar({
   }));
 
   return (
-    <div className="ui-surface ui-card ui-whale-radar-panel" aria-label="Whale Radar">
-      <div className="ui-whale-radar-panel-inner">
+    <Fragment>
+      <div className="ui-surface ui-card ui-whale-radar-panel" aria-label="Whale Radar">
+        <div className="ui-whale-radar-panel-inner">
       <article className="ui-whale-panel-section" aria-label="Whale Radar score for selected lens">
         <div className="ui-cluster">
           <div>
@@ -179,18 +188,80 @@ export function WhaleRadar({
           </div>
         </div>
       </details>
+        </div>
+      </div>
 
-      <section className="ui-whale-panel-section" aria-live="polite">
-        <p className="ui-whale-network-heading">Whale network scan (4 levels)</p>
-        <p className="ui-text-caption" style={{ marginBottom: "0.65em" }}>
-          Each round scores the wallet, then expands to distinct counterparties from incoming/outgoing activity in the
-          selected time window (capped per wallet). Repeats up to four rounds.
-        </p>
-        <div className="ui-whale-network-options ui-stack-tight">
-          <label className="ui-text-overline" style={{ color: "rgba(183,176,255,0.55)" }}>
-            Neighbor transaction window
-          </label>
+      <section className="ui-surface ui-card ui-whale-network-status-card" aria-live="polite">
+        <div className="ui-whale-status-head">
+          <div>
+            <p className="ui-whale-status-title">Whale map</p>
+            <p className="ui-whale-status-sub">Up to 4 hops from this wallet · same rules as the graph scan</p>
+          </div>
+          {(whaleNetworkJob || whaleNetworkLoading) && (
+            <span
+              className="ui-whale-status-pill"
+              data-status={whaleNetworkJob?.status ?? "queued"}
+              title={whaleNetworkJob?.progress ?? ""}
+            >
+              {whaleNetworkJob ? whaleStatusLabel(whaleNetworkJob.status) : "Starting"}
+            </span>
+          )}
+        </div>
+
+        {whaleNetworkError && <p className="ui-whale-status-error">{whaleNetworkError}</p>}
+
+        {!whaleNetworkError && whaleNetworkLoading && !whaleNetworkJob && (
+          <p className="ui-whale-status-muted">Starting…</p>
+        )}
+
+        {!whaleNetworkError && whaleNetworkJob && (
+          <div className="ui-whale-status-body">
+            <div className="ui-whale-status-metrics">
+              <div>
+                <span className="ui-whale-metric-value">{whaleNetworkJob.processed_wallets}</span>
+                <span className="ui-whale-metric-label">wallets</span>
+              </div>
+              <div>
+                <span className="ui-whale-metric-value">{Math.min(4, whaleNetworkJob.scanned_levels + 1)}</span>
+                <span className="ui-whale-metric-label">depth</span>
+              </div>
+              <div>
+                <span className="ui-whale-metric-value">{whaleNetworkJob.queued_wallets}</span>
+                <span className="ui-whale-metric-label">queued</span>
+              </div>
+            </div>
+            {(whaleNetworkJob.upstream_retries ?? 0) > 0 && (
+              <p className="ui-whale-status-muted">
+                Slow upstream — retried {whaleNetworkJob.upstream_retries} time(s); nothing skipped.
+              </p>
+            )}
+            {whaleNetworkJob.status === "failed" && whaleNetworkJob.error && (
+              <p className="ui-whale-status-error">{whaleNetworkJob.error}</p>
+            )}
+            {whaleNetworkJob.status === "completed" && whaleNetworkJob.whale_found && (
+              <p className="ui-whale-status-success">
+                High-score wallet in map: {whaleNetworkJob.whale_wallet} (score {whaleNetworkJob.whale_score}, hop{" "}
+                {whaleNetworkJob.whale_level}).
+              </p>
+            )}
+            {whaleNetworkJob.status === "completed" && !whaleNetworkJob.whale_found && (
+              <p className="ui-whale-status-muted">No high-score wallet found within 4 hops.</p>
+            )}
+            {whaleNetworkLoading && (
+              <button type="button" className="ui-btn ui-btn--ghost ui-whale-cancel" onClick={onCancelWhaleNetworkScan}>
+                Stop scan
+              </button>
+            )}
+          </div>
+        )}
+      </section>
+
+      <details className="ui-surface ui-card ui-whale-scan-further">
+        <summary className="ui-whale-scan-further-summary">Go deeper — time range &amp; Telegram</summary>
+        <div className="ui-whale-scan-further-body">
+          <label className="ui-whale-field-label">Neighbor activity window</label>
           <select
+            className="ui-whale-field-control"
             value={whaleTxWindowDays === null ? "full" : String(whaleTxWindowDays)}
             onChange={(e) => {
               const v = e.target.value;
@@ -200,81 +271,27 @@ export function WhaleRadar({
           >
             <option value="15">Last 15 days</option>
             <option value="30">Last 30 days</option>
-            <option value="full">Full history (slower, still capped)</option>
+            <option value="full">Full history</option>
           </select>
-          <label className="ui-text-overline ui-mt-tight" style={{ color: "rgba(183,176,255,0.55)" }}>
-            Telegram chat or channel id
-          </label>
+          <label className="ui-whale-field-label ui-mt-tight">Telegram (optional)</label>
           <input
             type="text"
-            placeholder="-1001234567890 or @channelusername"
+            className="ui-whale-field-control"
+            placeholder="Channel id, e.g. -100…"
             value={tgDraft}
             onChange={(e) => setTgDraft(e.target.value)}
-            aria-label="Telegram destination for scan updates"
+            aria-label="Telegram chat or channel id"
             autoComplete="off"
           />
-          <p className="ui-text-caption">
-            Set <code className="text-[rgba(200,190,255,0.85)]">TELEGRAM_BOT_TOKEN</code> on the server. Add the bot to
-            your channel as admin, then paste the channel id here. Use &quot;Apply Telegram&quot; to restart the job
-            with this destination.
+          <p className="ui-whale-hint">
+            Server needs <code className="text-[rgba(200,190,255,0.85)]">TELEGRAM_BOT_TOKEN</code>. Bot must be an
+            admin in the channel.
           </p>
-          <div className="ui-cluster" style={{ flexWrap: "wrap", gap: "0.5em" }}>
-            <button type="button" className="ui-btn ui-btn--ghost" onClick={() => onApplyWhaleTelegram(tgDraft.trim())}>
-              Apply Telegram &amp; restart scan
-            </button>
-          </div>
+          <button type="button" className="ui-btn ui-btn--ghost" onClick={() => onApplyWhaleTelegram(tgDraft.trim())}>
+            Apply &amp; restart scan
+          </button>
         </div>
-        {whaleNetworkError && <p className="ui-text-body text-[#ffb3b2] ui-mt">{whaleNetworkError}</p>}
-        {!whaleNetworkError && whaleNetworkJob && (
-          <div className="ui-stack-tight ui-mt">
-            <p className="ui-text-caption">
-              Job window:{" "}
-              <span className="text-white">
-                {whaleNetworkJob.tx_window_days === null
-                  ? "full"
-                  : `${whaleNetworkJob.tx_window_days ?? 30}d`}
-              </span>
-              {whaleNetworkJob.telegram_notifications ? (
-                <span> · Telegram updates on</span>
-              ) : (
-                <span> · Telegram updates off</span>
-              )}
-            </p>
-            <p className="ui-text-body text-[rgba(255,255,255,0.6)]">
-              Status: <span className="text-white">{whaleNetworkJob.status}</span> — {whaleNetworkJob.progress}
-            </p>
-            <p className="ui-text-caption">
-              Processed {whaleNetworkJob.processed_wallets} wallet(s)
-              {(whaleNetworkJob.skipped_wallets ?? 0) > 0 ? (
-                <span>, skipped {whaleNetworkJob.skipped_wallets} (upstream errors)</span>
-              ) : null}
-              , queued {whaleNetworkJob.queued_wallets}, depth {Math.min(4, whaleNetworkJob.scanned_levels + 1)}/4
-            </p>
-            {whaleNetworkJob.error && whaleNetworkJob.status === "failed" && (
-              <p className="ui-text-body text-[#ffb3b2]">Error: {whaleNetworkJob.error}</p>
-            )}
-            {whaleNetworkJob.whale_found ? (
-              <p className="ui-text-body text-[#5DCAA5]">
-                Whale network detected via wallet {whaleNetworkJob.whale_wallet} (score {whaleNetworkJob.whale_score},
-                level {whaleNetworkJob.whale_level}).
-              </p>
-            ) : (
-              whaleNetworkJob.status === "completed" && (
-                <p className="ui-text-body text-[rgba(255,255,255,0.7)]">No whale wallet found within 4 levels.</p>
-              )
-            )}
-            {whaleNetworkLoading && (
-              <button type="button" className="ui-btn ui-btn--ghost" onClick={onCancelWhaleNetworkScan}>
-                Cancel background scan
-              </button>
-            )}
-          </div>
-        )}
-        {!whaleNetworkError && !whaleNetworkJob && (
-          <p className="ui-text-caption ui-mt">Preparing whale network scan…</p>
-        )}
-      </section>
-      </div>
-    </div>
+      </details>
+    </Fragment>
   );
 }

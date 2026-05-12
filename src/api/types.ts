@@ -21,6 +21,7 @@ export interface WhaleNetworkJob {
   progress: string;
   processed_wallets: number;
   skipped_wallets?: number;
+  upstream_retries?: number;
   queued_wallets: number;
   scanned_levels: number;
   whale_found: boolean;

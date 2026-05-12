@@ -243,6 +243,7 @@ async def test_whale_network_endpoints(monkeypatch):
                 "progress": "ok",
                 "processed_wallets": 1,
                 "skipped_wallets": 0,
+                "upstream_retries": 0,
                 "queued_wallets": 0,
                 "scanned_levels": 1,
                 "whale_found": False,

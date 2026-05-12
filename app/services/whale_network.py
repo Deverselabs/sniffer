@@ -9,12 +9,14 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, Literal
 
-from app.services.ethereum import eth_snapshot
+import httpx
+
+from app.services.ethereum import EthereumServiceError, eth_snapshot
 from app.services.http_client import UpstreamHTTPError, get_json_with_retry
 from app.services.notify import send_telegram_text
 from app.services.scorer import score
-from app.services.solana import sol_balance, sol_deposits
-from app.services.tron import tron_balance, tron_deposits
+from app.services.solana import SolanaServiceError, sol_balance, sol_deposits
+from app.services.tron import TronServiceError, tron_balance, tron_deposits
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,61 @@ _TRON_CONCURRENCY_DEFAULT = 6
 _SOL_CONCURRENCY_DEFAULT = 4
 # Max asyncio tasks per gather chunk (frontiers can be large at deep levels).
 _FRONTIER_CHUNK_SIZE = 48
+_DEFAULT_SCANS_PER_SEC = 3.0
+_DEFAULT_MAX_RETRIES = 50
+
+
+class AsyncRateLimiter:
+    """Smooth spacing between scan starts (global per job)."""
+
+    def __init__(self, scans_per_second: float) -> None:
+        self._interval = 1.0 / scans_per_second if scans_per_second > 0 else 0.35
+        self._lock = asyncio.Lock()
+        self._next_available = 0.0
+
+    async def acquire(self) -> None:
+        async with self._lock:
+            loop = asyncio.get_running_loop()
+            now = loop.time()
+            wait = max(0.0, self._next_available - now)
+            self._next_available = max(now, self._next_available) + self._interval
+        if wait > 0:
+            await asyncio.sleep(wait)
+
+
+def _scans_per_second() -> float:
+    raw = os.getenv("WHALE_NETWORK_MAX_SCANS_PER_SECOND", str(_DEFAULT_SCANS_PER_SEC)).strip()
+    try:
+        v = float(raw)
+    except ValueError:
+        v = _DEFAULT_SCANS_PER_SEC
+    return max(0.1, min(30.0, v))
+
+
+def _max_retries_per_wallet() -> int:
+    raw = os.getenv("WHALE_NETWORK_MAX_RETRIES_PER_WALLET", str(_DEFAULT_MAX_RETRIES)).strip()
+    try:
+        n = int(raw)
+    except ValueError:
+        n = _DEFAULT_MAX_RETRIES
+    return max(3, min(200, n))
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    if isinstance(exc, (UpstreamHTTPError, httpx.RequestError)):
+        return True
+    if isinstance(exc, (EthereumServiceError, TronServiceError, SolanaServiceError)):
+        return True
+    if isinstance(exc, (asyncio.TimeoutError, ConnectionError, OSError)):
+        return True
+    if isinstance(exc, RuntimeError):
+        msg = str(exc).lower()
+        if "missing" in msg and "api" in msg:
+            return False
+        if "unsupported chain" in msg:
+            return False
+        return False
+    return False
 
 
 def _parallel_concurrency(chain: str) -> int:
@@ -85,7 +142,8 @@ class WhaleNetworkJob:
     status: Literal["queued", "running", "completed", "failed", "cancelled"] = "queued"
     progress: str = "queued"
     processed_wallets: int = 0
-    skipped_wallets: int = 0
+    skipped_wallets: int = 0  # legacy; kept 0 — transient failures use retries instead
+    upstream_retries: int = 0
     queued_wallets: int = 0
     scanned_levels: int = 0
     whale_found: bool = False
@@ -110,6 +168,7 @@ class WhaleNetworkJob:
             "progress": self.progress,
             "processed_wallets": self.processed_wallets,
             "skipped_wallets": self.skipped_wallets,
+            "upstream_retries": self.upstream_retries,
             "queued_wallets": self.queued_wallets,
             "scanned_levels": self.scanned_levels,
             "whale_found": self.whale_found,
@@ -142,24 +201,23 @@ def _normalize_for_score(deposits: list[Dict[str, Any]]) -> list[Dict[str, Any]]
 
 
 async def _etherscan_txlist(address: str, api_key: str) -> list[dict[str, Any]]:
-    try:
-        body = await get_json_with_retry(
-            ETHERSCAN_BASE,
-            params={
-                "module": "account",
-                "action": "txlist",
-                "chainid": 1,
-                "address": address,
-                "startblock": 0,
-                "endblock": 99999999,
-                "sort": "desc",
-                "apikey": api_key,
-            },
-            timeout=30,
-        )
-    except UpstreamHTTPError:
-        return []
+    body = await get_json_with_retry(
+        ETHERSCAN_BASE,
+        params={
+            "module": "account",
+            "action": "txlist",
+            "chainid": 1,
+            "address": address,
+            "startblock": 0,
+            "endblock": 99999999,
+            "sort": "desc",
+            "apikey": api_key,
+        },
+        timeout=30,
+    )
     result = body.get("result", [])
+    if isinstance(result, str):
+        raise UpstreamHTTPError(f"Etherscan txlist error: {result[:500]}")
     return result if isinstance(result, list) else []
 
 
@@ -306,20 +364,40 @@ async def _run_job(job_id: str) -> None:
         frontier: list[str] = [root_raw]
         conc = _parallel_concurrency(job.chain)
         sem = asyncio.Semaphore(conc)
+        rate = AsyncRateLimiter(_scans_per_second())
+        max_retries = _max_retries_per_wallet()
+        rps = _scans_per_second()
 
-        async def scan_wallet(wallet: str) -> tuple[str, int | None, list[str] | None, Exception | None]:
+        async def scan_wallet_with_retries(wallet: str) -> tuple[str, int, list[str]]:
             async with sem:
-                try:
-                    score, neighbors = await _wallet_snapshot_and_score(
-                        wallet,
-                        job.chain,
-                        tx_window_days=job.tx_window_days,
-                    )
-                    return (wallet, score, neighbors, None)
-                except asyncio.CancelledError:
-                    raise
-                except Exception as exc:  # noqa: BLE001
-                    return (wallet, None, None, exc)
+                last_exc: BaseException | None = None
+                for attempt in range(max_retries):
+                    if job.cancel_requested:
+                        raise asyncio.CancelledError()
+                    await rate.acquire()
+                    try:
+                        score, neighbors = await _wallet_snapshot_and_score(
+                            wallet,
+                            job.chain,
+                            tx_window_days=job.tx_window_days,
+                        )
+                        return wallet, int(score), neighbors
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:  # noqa: BLE001
+                        last_exc = exc
+                        if not _is_retryable(exc):
+                            raise
+                        job.upstream_retries += 1
+                        job.progress = (
+                            f"Level {level + 1}/{MAX_LEVEL}: retry {attempt + 1}/{max_retries} "
+                            f"for {wallet[:10]}…"
+                        )
+                        job.updated_at = _iso_now()
+                        await asyncio.sleep(min(45.0, 0.35 * (2 ** min(attempt, 10))))
+                raise RuntimeError(
+                    f"Could not scan wallet {wallet} after {max_retries} attempts. Last error: {last_exc}"
+                ) from last_exc
 
         whale_hit: tuple[str, int, int] | None = None
 
@@ -331,8 +409,8 @@ async def _run_job(job_id: str) -> None:
                 job.completed_at = _iso_now()
                 await _telegram_safe(
                     job,
-                    f"⏹ Whale scan cancelled\n"
-                    f"Processed {job.processed_wallets}, skipped {job.skipped_wallets}",
+                    "⏹ Whale scan cancelled\n"
+                    f"Processed {job.processed_wallets}, retries {job.upstream_retries}",
                 )
                 return
 
@@ -341,8 +419,8 @@ async def _run_job(job_id: str) -> None:
 
             job.scanned_levels = max(job.scanned_levels, level)
             job.progress = (
-                f"Level {level + 1}/{MAX_LEVEL}: batch {len(frontier)} wallet(s), "
-                f"up to {conc} concurrent upstream calls…"
+                f"Level {level + 1}/{MAX_LEVEL}: scanning {len(frontier)} wallet(s) "
+                f"(≤{conc} parallel, {rps:.1f}/s throttle)…"
             )
             job.updated_at = _iso_now()
 
@@ -353,20 +431,25 @@ async def _run_job(job_id: str) -> None:
                 if job.cancel_requested or stop_all:
                     break
                 chunk = frontier[chunk_start : chunk_start + _FRONTIER_CHUNK_SIZE]
-                chunk_results = await asyncio.gather(*(scan_wallet(w) for w in chunk))
+                chunk_results = await asyncio.gather(
+                    *[scan_wallet_with_retries(w) for w in chunk],
+                    return_exceptions=True,
+                )
 
                 for raw in chunk_results:
-                    wallet, total_score, neighbors, err = raw
-                    if err is not None:
-                        job.skipped_wallets += 1
-                        job.progress = (
-                            f"Skipped wallet after upstream error ({job.skipped_wallets} skips); continuing…"
-                        )
+                    if isinstance(raw, Exception):
+                        if isinstance(raw, asyncio.CancelledError):
+                            raise raw
+                        job.status = "failed"
+                        job.error = str(raw)[:2000]
+                        job.progress = "Failed"
                         job.updated_at = _iso_now()
-                        logger.warning("Whale network skip wallet=%s error=%s", wallet, err)
-                        continue
+                        job.completed_at = _iso_now()
+                        logger.error("Whale network job failed: %s", raw)
+                        await _telegram_safe(job, f"❌ Whale scan failed\n{str(raw)[:3500]}")
+                        return
 
-                    assert total_score is not None and neighbors is not None
+                    wallet, total_score, neighbors = raw
                     job.processed_wallets += 1
 
                     if (
@@ -378,17 +461,20 @@ async def _run_job(job_id: str) -> None:
                             job,
                             "⏳ Whale scan progress\n"
                             f"Processed: {job.processed_wallets}\n"
-                            f"Skipped: {job.skipped_wallets}\n"
-                            f"Queued (next wave): {len(next_frontier)}\n"
+                            f"Upstream retries: {job.upstream_retries}\n"
+                            f"Next wave size: {len(next_frontier)}\n"
                             f"Depth: {min(MAX_LEVEL, level + 1)}/{MAX_LEVEL}",
                         )
 
-                    if _visit_key(job.chain, wallet) != root_key and total_score >= WHALE_SCORE_THRESHOLD:
+                    if (
+                        whale_hit is None
+                        and _visit_key(job.chain, wallet) != root_key
+                        and total_score >= WHALE_SCORE_THRESHOLD
+                    ):
                         whale_hit = (wallet, total_score, level)
                         stop_all = True
-                        break
 
-                    if level + 1 < MAX_LEVEL:
+                    if level + 1 < MAX_LEVEL and whale_hit is None:
                         for nxt in neighbors[:MAX_NEIGHBORS_PER_WALLET]:
                             if len(visited) >= MAX_WALLETS_TOTAL:
                                 stop_all = True
@@ -423,7 +509,7 @@ async def _run_job(job_id: str) -> None:
                     f"Wallet: `{job.whale_wallet}`\n"
                     f"Score: {job.whale_score} (threshold {WHALE_SCORE_THRESHOLD})\n"
                     f"Graph level: {job.whale_level}\n"
-                    f"Processed: {job.processed_wallets}, skipped: {job.skipped_wallets}",
+                    f"Processed: {job.processed_wallets}, upstream retries: {job.upstream_retries}",
                 )
                 return
 
@@ -437,8 +523,7 @@ async def _run_job(job_id: str) -> None:
             job.completed_at = _iso_now()
             await _telegram_safe(
                 job,
-                f"⏹ Whale scan cancelled\n"
-                f"Processed {job.processed_wallets}, skipped {job.skipped_wallets}",
+                f"⏹ Whale scan cancelled\nProcessed {job.processed_wallets}, retries {job.upstream_retries}",
             )
             return
 
@@ -450,7 +535,7 @@ async def _run_job(job_id: str) -> None:
             job,
             "✅ Whale scan completed\n"
             f"Whale found: {job.whale_found}\n"
-            f"Processed: {job.processed_wallets}, skipped: {job.skipped_wallets}\n"
+            f"Processed: {job.processed_wallets}, upstream retries: {job.upstream_retries}\n"
             f"Max depth reached: {min(MAX_LEVEL, job.scanned_levels + 1)}/{MAX_LEVEL}",
         )
     except asyncio.CancelledError:
