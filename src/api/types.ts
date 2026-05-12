@@ -31,6 +31,13 @@ export interface WhaleNetworkJob {
   whale_wallet: string | null;
   whale_score: number | null;
   whale_level: number | null;
+  /** Root → … → whale wallet (when whale_found). */
+  whale_path?: string[];
+  /** Highest score among wallets scanned in this job. */
+  network_max_score?: number | null;
+  network_max_score_wallet?: string | null;
+  /** Root → … → wallet with network_max_score. */
+  network_max_score_path?: string[];
   error: string | null;
   created_at: string;
   updated_at: string;

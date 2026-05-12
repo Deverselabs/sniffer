@@ -22,7 +22,7 @@ function App() {
   const [chain, setChain] = useState<Chain>("ethereum");
   const [address, setAddress] = useState("");
   const [toasts, setToasts] = useState<Array<{ id: string; text: string }>>([]);
-  const [whaleTxWindowDays, setWhaleTxWindowDays] = useState<number | null>(30);
+  const [whaleTxWindowDays, setWhaleTxWindowDays] = useState<number | null>(5);
   const [whaleMaxLevels, setWhaleMaxLevels] = useState(2);
   const [whaleTelegramForScan, setWhaleTelegramForScan] = useState("");
   const rootWallet = useWalletData();
@@ -75,7 +75,7 @@ function App() {
   useEffect(() => {
     if (activeData) {
       setWhaleTelegramForScan("");
-      setWhaleTxWindowDays(30);
+      setWhaleTxWindowDays(5);
       setWhaleMaxLevels(2);
     }
   }, [activeData?.address, activeData?.chain]);
@@ -349,12 +349,14 @@ function App() {
                     whaleNetworkLoading={whaleNetworkLoading}
                     whaleNetworkError={whaleNetworkError}
                     onCancelWhaleNetworkScan={cancelWhaleNetworkScan}
+                    onWhaleMapWalletClick={(addr) => handleAddressClick(addr, activeData)}
                   />
                 )}
                 {activeData && <MetricsBar data={activeData} />}
                 {activeData && (
                   <TransactionList
                     chain={activeData.chain}
+                    profile={profile}
                     transactions={activeData.incomingTx}
                     onAddressClick={(addr) => handleAddressClick(addr, activeData)}
                   />

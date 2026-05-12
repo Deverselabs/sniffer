@@ -757,12 +757,23 @@ body {
 .ui-select {
   border-radius: var(--ui-radius);
   border: var(--ui-border) rgba(127, 119, 221, 0.2);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(127, 119, 221, 0.05);
   padding: 0.5em 0.75em;
   font-family: "Courier New", Courier, monospace;
   font-size: 87.5%;
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(175, 169, 236, 0.9);
   cursor: pointer;
+  color-scheme: dark;
+}
+
+.ui-select:focus {
+  outline: none;
+  border-color: rgba(127, 119, 221, 0.45);
+}
+
+.ui-select option {
+  color: rgba(175, 169, 236, 0.95);
+  background: rgb(24, 24, 32);
 }
 
 .ui-progress-track {
@@ -1028,6 +1039,94 @@ body {
   font-size: 81.25%;
   color: rgba(140, 230, 195, 0.95);
   line-height: 1.35;
+}
+
+@keyframes ui-whale-ultimate-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.28);
+    border-color: rgba(168, 85, 247, 0.42);
+  }
+  50% {
+    box-shadow: 0 0 22px 3px rgba(168, 85, 247, 0.22);
+    border-color: rgba(216, 180, 254, 0.65);
+  }
+}
+
+.ui-whale-ultimate-banner {
+  margin: 0.75em 0 0;
+  padding: 0.85em 1em;
+  border-radius: var(--ui-radius);
+  border: var(--ui-border) rgba(168, 85, 247, 0.5);
+  background: linear-gradient(
+    125deg,
+    rgba(88, 28, 135, 0.38) 0%,
+    rgba(12, 8, 22, 0.92) 50%,
+    rgba(49, 46, 129, 0.42) 100%
+  );
+  animation: ui-whale-ultimate-flash 2.2s ease-in-out infinite;
+}
+
+.ui-whale-ultimate-title {
+  margin: 0;
+  font-size: 87.5%;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(233, 213, 255, 0.98);
+}
+
+.ui-whale-network-max {
+  margin: 0.85em 0 0;
+  padding: 0.75em 0.85em;
+  border-radius: var(--ui-radius);
+  border: var(--ui-border) rgba(127, 119, 221, 0.22);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.ui-whale-network-max-title {
+  margin: 0;
+  font-size: 68.75%;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(175, 169, 236, 0.75);
+}
+
+.ui-whale-network-max-value {
+  margin: 0.15em 0 0;
+  font-size: 200%;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-whale-path-block {
+  margin-top: 0.45em;
+}
+
+.ui-whale-path-label {
+  margin: 0 0 0.35em;
+  font-size: 68.75%;
+  color: rgba(255, 255, 255, 0.42);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ui-whale-path-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35em 0.25em;
+  font-size: 81.25%;
+}
+
+.ui-whale-path-arrow {
+  color: rgba(175, 169, 236, 0.55);
+  user-select: none;
+}
+
+.ui-whale-path-link {
+  word-break: break-all;
 }
 
 .ui-whale-cancel {

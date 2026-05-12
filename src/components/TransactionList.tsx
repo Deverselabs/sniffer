@@ -1,16 +1,21 @@
-import { useMemo, useState } from "react";
-import type { Chain, Transaction } from "../api";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { Chain, IndustryProfile, Transaction } from "../api";
+import { fetchWalletData } from "../api";
 import { downloadCsv } from "../utils/exportCsv";
 import { explorerBase } from "../utils/address";
+import { computeWhaleScore } from "../utils/whaleScore";
 import { TransactionCard } from "./TransactionCard";
 
 interface TransactionListProps {
   chain: Chain;
+  profile: IndustryProfile;
   transactions: Transaction[];
   onAddressClick: (address: string) => void;
 }
 
-type SortMode = "recent" | "amount";
+type SortMode = "recent" | "amount" | "score";
+
+const SCORE_FETCH_CONCURRENCY = 4;
 
 function formatReadableUtc(unixTs: number): string {
   const date = new Date(unixTs * 1000);
@@ -24,19 +29,91 @@ function formatReadableUtc(unixTs: number): string {
 
 export function TransactionList({
   chain,
+  profile,
   transactions,
   onAddressClick,
 }: TransactionListProps) {
   const [sortMode, setSortMode] = useState<SortMode>("amount");
   const [visibleCount, setVisibleCount] = useState(10);
+  const [senderScores, setSenderScores] = useState<Record<string, number>>({});
+  const senderScoresRef = useRef(senderScores);
+  senderScoresRef.current = senderScores;
+  const transactionsRef = useRef(transactions);
+  transactionsRef.current = transactions;
+
+  const recipientAddress = transactions[0]?.to ?? "";
+  const transactionsFingerprint = useMemo(
+    () => transactions.map((t) => t.hash).join("\n"),
+    [transactions]
+  );
+
+  useLayoutEffect(() => {
+    setSenderScores({});
+  }, [recipientAddress, chain, transactionsFingerprint, profile]);
+
+  useEffect(() => {
+    const txs = transactionsRef.current;
+    if (sortMode !== "score" || txs.length === 0) return;
+
+    const froms = [...new Set(txs.map((t) => t.from))];
+    const need = froms.filter((f) => !(f in senderScoresRef.current));
+    if (need.length === 0) return;
+
+    let cancelled = false;
+    const queue = [...need];
+
+    async function worker() {
+      while (!cancelled && queue.length > 0) {
+        const addr = queue.shift();
+        if (!addr) break;
+        try {
+          const data = await fetchWalletData(addr, chain);
+          const total = computeWhaleScore(data, profile).total;
+          if (!cancelled) {
+            setSenderScores((prev) => ({ ...prev, [addr]: total }));
+          }
+        } catch {
+          if (!cancelled) {
+            setSenderScores((prev) => ({ ...prev, [addr]: 0 }));
+          }
+        }
+      }
+    }
+
+    const workers = Array.from({ length: Math.min(SCORE_FETCH_CONCURRENCY, queue.length) }, () =>
+      worker()
+    );
+    void Promise.all(workers);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sortMode, chain, profile, transactionsFingerprint, recipientAddress]);
 
   const sortedTransactions = useMemo(() => {
     const copy = [...transactions];
     if (sortMode === "amount") {
       return copy.sort((a, b) => b.valueEth - a.valueEth);
     }
+    if (sortMode === "score") {
+      const rank = (from: string) => {
+        const s = senderScores[from];
+        return s === undefined ? -1 : s;
+      };
+      return copy.sort((a, b) => {
+        const diff = rank(b.from) - rank(a.from);
+        if (diff !== 0) return diff;
+        return b.timestamp - a.timestamp;
+      });
+    }
     return copy.sort((a, b) => b.timestamp - a.timestamp);
-  }, [transactions, sortMode]);
+  }, [transactions, sortMode, senderScores]);
+
+  const scorePendingCount = useMemo(() => {
+    if (sortMode !== "score" || transactions.length === 0) return 0;
+    const uniqueFrom = new Set(transactions.map((t) => t.from));
+    return [...uniqueFrom].filter((f) => !(f in senderScores)).length;
+  }, [sortMode, transactions, senderScores]);
 
   const visibleTransactions = sortedTransactions.slice(0, visibleCount);
 
@@ -93,6 +170,12 @@ export function TransactionList({
             <div className="ui-cluster items-start">
               <p className="ui-text-body text-[rgba(255,255,255,0.35)]">
                 Showing {visibleTransactions.length} of {transactions.length} deposits
+                {scorePendingCount > 0 ? (
+                  <span className="text-[rgba(175,169,236,0.85)]">
+                    {" "}
+                    — loading {scorePendingCount} depositor scores…
+                  </span>
+                ) : null}
               </p>
               <div className="ui-row">
                 <button type="button" className="ui-btn ui-btn--outline" onClick={handleExportDeposits}>
@@ -102,9 +185,11 @@ export function TransactionList({
                   value={sortMode}
                   onChange={(e) => setSortMode(e.target.value as SortMode)}
                   className="ui-select"
+                  aria-label="Sort deposits"
                 >
                   <option value="recent">Most recent</option>
                   <option value="amount">Highest amount</option>
+                  <option value="score">Score</option>
                 </select>
               </div>
             </div>
@@ -116,7 +201,7 @@ export function TransactionList({
                   tx={tx}
                   chain={chain}
                   onAddressClick={onAddressClick}
-                  whaleScore={undefined}
+                  whaleScore={tx.from in senderScores ? senderScores[tx.from] : undefined}
                 />
               ))}
             </div>

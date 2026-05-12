@@ -52,7 +52,7 @@ class WhaleNetworkStartRequest(BaseModel):
     address: str = Field(..., min_length=2)
     chain: Literal["ethereum", "tron", "solana"] = "ethereum"
     tx_window_days: int | None = Field(
-        default=30,
+        default=5,
         description="Neighbor discovery window in days; null = full history (per-wallet caps still apply).",
     )
     max_levels: int | None = Field(

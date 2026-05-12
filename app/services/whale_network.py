@@ -155,7 +155,7 @@ class WhaleNetworkJob:
     job_id: str
     root_address: str
     chain: str
-    tx_window_days: int | None = 30
+    tx_window_days: int | None = 5
     telegram_chat_id: str | None = None
     status: Literal["queued", "running", "completed", "failed", "cancelled"] = "queued"
     progress: str = "queued"
@@ -168,6 +168,10 @@ class WhaleNetworkJob:
     whale_wallet: str | None = None
     whale_score: int | None = None
     whale_level: int | None = None
+    whale_path: list[str] = field(default_factory=list)
+    network_max_score: int | None = None
+    network_max_score_wallet: str | None = None
+    network_max_score_path: list[str] = field(default_factory=list)
     error: str | None = None
     wallet_cache_hits: int = 0
     max_levels: int = 2
@@ -195,6 +199,10 @@ class WhaleNetworkJob:
             "whale_wallet": self.whale_wallet,
             "whale_score": self.whale_score,
             "whale_level": self.whale_level,
+            "whale_path": list(self.whale_path),
+            "network_max_score": self.network_max_score,
+            "network_max_score_wallet": self.network_max_score_wallet,
+            "network_max_score_path": list(self.network_max_score_path),
             "error": self.error,
             "wallet_cache_hits": self.wallet_cache_hits,
             "max_levels": self.max_levels,
@@ -646,6 +654,10 @@ async def _run_job(job_id: str) -> None:
         root_raw = job.root_address.strip()
         root_key = _visit_key(job.chain, root_raw)
         visited: set[str] = {root_key}
+        parent: dict[str, str] = {}
+        key_to_address: dict[str, str] = {root_key: root_raw}
+        best_score = -1
+        best_key: str | None = None
         level = 0
         frontier: list[str] = [root_raw]
         conc = _parallel_concurrency(job.chain)
@@ -687,6 +699,34 @@ async def _run_job(job_id: str) -> None:
                 ) from last_exc
 
         whale_hit: tuple[str, int, int] | None = None
+
+        def _reconstruct_path(end_key: str | None) -> list[str]:
+            if not end_key or end_key not in key_to_address:
+                return []
+            keys_rev: list[str] = []
+            cur: str | None = end_key
+            for _ in range(MAX_WALLETS_TOTAL + 3):
+                if cur is None:
+                    break
+                keys_rev.append(cur)
+                if cur == root_key:
+                    break
+                cur = parent.get(cur)
+            if not keys_rev or keys_rev[-1] != root_key:
+                return []
+            keys_rev.reverse()
+            return [key_to_address.get(k, k) for k in keys_rev]
+
+        def _finalize_graph_fields(hit: tuple[str, int, int] | None) -> None:
+            job.network_max_score = int(best_score) if best_score >= 0 else None
+            job.network_max_score_wallet = key_to_address.get(best_key) if best_key is not None else None
+            job.network_max_score_path = _reconstruct_path(best_key)
+            if hit is not None:
+                w, _, _ = hit
+                wk = _visit_key(job.chain, w)
+                job.whale_path = _reconstruct_path(wk)
+            else:
+                job.whale_path = []
 
         while frontier and len(visited) <= MAX_WALLETS_TOTAL:
             if job.cancel_requested:
@@ -738,6 +778,11 @@ async def _run_job(job_id: str) -> None:
 
                     wallet, total_score, neighbors = raw
                     job.processed_wallets += 1
+                    wallet_key = _visit_key(job.chain, wallet)
+                    key_to_address[wallet_key] = wallet.strip()
+                    if int(total_score) > best_score:
+                        best_score = int(total_score)
+                        best_key = wallet_key
 
                     if (
                         job.telegram_chat_id
@@ -770,6 +815,8 @@ async def _run_job(job_id: str) -> None:
                             if nk in visited:
                                 continue
                             visited.add(nk)
+                            parent[nk] = wallet_key
+                            key_to_address[nk] = nxt.strip()
                             next_frontier.append(nxt)
                         if stop_all:
                             break
@@ -782,6 +829,7 @@ async def _run_job(job_id: str) -> None:
 
             if whale_hit:
                 w, sc, lev = whale_hit
+                _finalize_graph_fields(whale_hit)
                 job.whale_found = True
                 job.whale_wallet = w
                 job.whale_score = sc
@@ -816,6 +864,7 @@ async def _run_job(job_id: str) -> None:
 
         job.status = "completed"
         job.progress = "Completed"
+        _finalize_graph_fields(None)
         job.updated_at = _iso_now()
         job.completed_at = _iso_now()
         await _telegram_safe(
@@ -844,7 +893,7 @@ async def start_whale_network_job(
     address: str,
     chain: str,
     *,
-    tx_window_days: int | None = 30,
+    tx_window_days: int | None = 5,
     telegram_chat_id: str | None = None,
     max_levels: int | None = None,
 ) -> WhaleNetworkJob:

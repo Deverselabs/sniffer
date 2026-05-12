@@ -1,6 +1,7 @@
 import { Fragment, useState } from "react";
 import type { LensScoreRow, WalletData, WhaleNetworkJob } from "../api";
 import { NEIGHBOR_WINDOW_PRESET_DAYS, neighborWindowSelectKey } from "../utils/whaleNeighborWindowUi";
+import { shortAddr } from "../utils/format";
 import {
   computeWhaleScore,
   INDUSTRY_PROFILES,
@@ -24,6 +25,8 @@ interface WhaleRadarProps {
   whaleNetworkLoading: boolean;
   whaleNetworkError: string | null;
   onCancelWhaleNetworkScan: () => void;
+  /** Navigate to a wallet from the map (same as deposit "From" click). */
+  onWhaleMapWalletClick: (address: string) => void;
 }
 
 function tierClass(color: "green" | "purple" | "blue" | "amber" | "red") {
@@ -51,6 +54,38 @@ function whaleStatusLabel(status: string): string {
   return status;
 }
 
+function WhaleMapAddressPath({
+  label,
+  path,
+  onWalletClick,
+}: {
+  label: string;
+  path: string[];
+  onWalletClick: (address: string) => void;
+}) {
+  if (!path?.length) return null;
+  return (
+    <div className="ui-whale-path-block">
+      <p className="ui-whale-path-label">{label}</p>
+      <div className="ui-whale-path-flow" aria-label={label}>
+        {path.map((addr, i) => (
+          <Fragment key={`${i}-${addr}`}>
+            {i > 0 ? <span className="ui-whale-path-arrow" aria-hidden>→</span> : null}
+            <button
+              type="button"
+              className="ui-link ui-whale-path-link font-mono"
+              title={addr}
+              onClick={() => onWalletClick(addr)}
+            >
+              {shortAddr(addr)}
+            </button>
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function WhaleRadar({
   data,
   profile,
@@ -68,6 +103,7 @@ export function WhaleRadar({
   whaleNetworkLoading,
   whaleNetworkError,
   onCancelWhaleNetworkScan,
+  onWhaleMapWalletClick,
 }: WhaleRadarProps) {
   const [showOtherLenses, setShowOtherLenses] = useState(false);
 
@@ -198,7 +234,9 @@ export function WhaleRadar({
           <div>
             <p className="ui-whale-status-title">Whale map</p>
             <p className="ui-whale-status-sub">
-              Up to {displayMaxLevels} graph level{displayMaxLevels === 1 ? "" : "s"} from this wallet
+              Up to {displayMaxLevels} graph level{displayMaxLevels === 1 ? "" : "s"} from this wallet. Defaults:{" "}
+              <strong className="text-[rgba(175,169,236,0.95)]">5 days</strong> neighbor activity,{" "}
+              <strong className="text-[rgba(175,169,236,0.95)]">2 levels</strong> depth (adjust under Go deeper).
             </p>
           </div>
           {(whaleNetworkJob || whaleNetworkLoading) && (
@@ -214,7 +252,8 @@ export function WhaleRadar({
 
         {!whaleTelegramForScan.trim() && (
           <p className="ui-whale-status-muted" style={{ marginTop: "0.5rem" }}>
-            Enter your Telegram chat id under Go deeper to start the whale map.
+            Add your Telegram chat id under <strong>Go deeper</strong> to run the whale map (required for scan
+            notifications). Until then, no map job is started. Defaults are 5-day window and 2 levels.
           </p>
         )}
 
@@ -251,14 +290,58 @@ export function WhaleRadar({
               <p className="ui-whale-status-error">{whaleNetworkJob.error}</p>
             )}
             {whaleNetworkJob.status === "completed" && whaleNetworkJob.whale_found && (
-              <p className="ui-whale-status-success">
-                High-score wallet in map: {whaleNetworkJob.whale_wallet} (score {whaleNetworkJob.whale_score}, hop{" "}
-                {whaleNetworkJob.whale_level}).
-              </p>
+              <div className="ui-whale-ultimate-banner ui-stack-tight">
+                <p className="ui-whale-ultimate-title">Ultimate Whale identified in network</p>
+                <p className="ui-whale-status-muted" style={{ marginTop: 0 }}>
+                  Score {whaleNetworkJob.whale_score ?? "—"} at hop {whaleNetworkJob.whale_level ?? "—"} — open any hop
+                  below to inspect that wallet (same as deposit sender navigation).
+                </p>
+                {whaleNetworkJob.whale_path && whaleNetworkJob.whale_path.length > 0 ? (
+                  <WhaleMapAddressPath
+                    label="Path from your wallet to the identified whale"
+                    path={whaleNetworkJob.whale_path}
+                    onWalletClick={onWhaleMapWalletClick}
+                  />
+                ) : whaleNetworkJob.whale_wallet ? (
+                  <button
+                    type="button"
+                    className="ui-link font-mono"
+                    title={whaleNetworkJob.whale_wallet}
+                    onClick={() => onWhaleMapWalletClick(whaleNetworkJob.whale_wallet!)}
+                  >
+                    {shortAddr(whaleNetworkJob.whale_wallet)}
+                  </button>
+                ) : null}
+              </div>
             )}
+            {whaleNetworkJob.status === "completed" &&
+              whaleNetworkJob.network_max_score != null && (
+                <div className="ui-whale-network-max ui-stack-tight">
+                  <p className="ui-whale-network-max-title">Highest score in explored map</p>
+                  <p className="ui-whale-network-max-value">{whaleNetworkJob.network_max_score}</p>
+                  {whaleNetworkJob.network_max_score_wallet ? (
+                    <p className="ui-whale-status-muted" style={{ marginTop: 0 }}>
+                      Wallet:{" "}
+                      <button
+                        type="button"
+                        className="ui-link font-mono"
+                        title={whaleNetworkJob.network_max_score_wallet}
+                        onClick={() => onWhaleMapWalletClick(whaleNetworkJob.network_max_score_wallet!)}
+                      >
+                        {shortAddr(whaleNetworkJob.network_max_score_wallet)}
+                      </button>
+                    </p>
+                  ) : null}
+                  <WhaleMapAddressPath
+                    label="Path from root to that wallet"
+                    path={whaleNetworkJob.network_max_score_path ?? []}
+                    onWalletClick={onWhaleMapWalletClick}
+                  />
+                </div>
+              )}
             {whaleNetworkJob.status === "completed" && !whaleNetworkJob.whale_found && (
               <p className="ui-whale-status-muted">
-                No high-score wallet found within {whaleNetworkJob.max_levels ?? 2} levels.
+                No high-score wallet (≥70) found within {whaleNetworkJob.max_levels ?? 2} levels.
               </p>
             )}
             {whaleNetworkLoading && (

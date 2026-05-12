@@ -13,7 +13,7 @@ function isTerminal(status: string): boolean {
 }
 
 function resolvedTxWindow(opts?: WhaleNetworkStartOptions | null): number | null {
-  if (opts?.tx_window_days === undefined) return 30;
+  if (opts?.tx_window_days === undefined) return 5;
   return opts.tx_window_days;
 }
 
@@ -90,7 +90,7 @@ function jobMatchesWallet(job: WhaleNetworkJob, address: string, chain: Chain): 
 }
 
 function jobTxWindowDays(job: WhaleNetworkJob): number | null {
-  if (job.tx_window_days === undefined) return 30;
+  if (job.tx_window_days === undefined) return 5;
   return job.tx_window_days;
 }
 
