@@ -247,6 +247,7 @@ async def test_whale_network_endpoints(monkeypatch):
                 "wallet_cache_hits": 0,
                 "queued_wallets": 0,
                 "scanned_levels": 1,
+                "max_levels": 2,
                 "whale_found": False,
                 "whale_wallet": None,
                 "whale_score": None,
@@ -285,3 +286,15 @@ async def test_whale_network_endpoints(monkeypatch):
         cancel_res = await client.post(f"/api/v1/whale-network/{job_id}/cancel")
         assert cancel_res.status_code == 200
         assert cancel_res.json()["status"] == "cancelled"
+
+
+def test_whale_network_start_request_max_levels_range():
+    from pydantic import ValidationError
+
+    from app.api.v1 import WhaleNetworkStartRequest
+
+    addr = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
+    m = WhaleNetworkStartRequest(address=addr, chain="ethereum", max_levels=5)
+    assert m.max_levels == 5
+    with pytest.raises(ValidationError):
+        WhaleNetworkStartRequest(address=addr, chain="ethereum", max_levels=6)

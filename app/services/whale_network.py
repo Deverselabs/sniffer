@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 
 ETHERSCAN_BASE = "https://api.etherscan.io/v2/api"
 ETH_ADDRESS_RE = re.compile(r"^0x[a-fA-F0-9]{40}$")
-MAX_LEVEL = 4
 MAX_WALLETS_TOTAL = 250
 MAX_NEIGHBORS_PER_WALLET = 30
 WHALE_SCORE_THRESHOLD = 70
@@ -43,6 +42,17 @@ _FRONTIER_CHUNK_SIZE = 48
 _DEFAULT_SCANS_PER_SEC = 3.0
 _DEFAULT_MAX_RETRIES = 50
 _DEFAULT_WALLET_CACHE_MAX = 5000
+_DEFAULT_WHALE_MAX_LEVELS = 2
+
+
+def _whale_network_max_levels() -> int:
+    """BFS depth cap (root = level 0). Default 2 for free-tier API limits; raise in prod via env."""
+    raw = os.getenv("WHALE_NETWORK_MAX_LEVEL", str(_DEFAULT_WHALE_MAX_LEVELS)).strip()
+    try:
+        n = int(raw)
+    except ValueError:
+        n = _DEFAULT_WHALE_MAX_LEVELS
+    return max(1, min(8, n))
 
 
 class AsyncRateLimiter:
@@ -160,6 +170,7 @@ class WhaleNetworkJob:
     whale_level: int | None = None
     error: str | None = None
     wallet_cache_hits: int = 0
+    max_levels: int = 2
     created_at: str = field(default_factory=_iso_now)
     updated_at: str = field(default_factory=_iso_now)
     completed_at: str | None = None
@@ -186,6 +197,7 @@ class WhaleNetworkJob:
             "whale_level": self.whale_level,
             "error": self.error,
             "wallet_cache_hits": self.wallet_cache_hits,
+            "max_levels": self.max_levels,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "completed_at": self.completed_at,
@@ -606,7 +618,7 @@ async def _run_job(job_id: str) -> None:
 
     try:
         job.status = "running"
-        job.progress = f"Breadth scan (max {MAX_LEVEL} levels), window {_window_label(job.tx_window_days)}…"
+        job.progress = f"Breadth scan (max {job.max_levels} levels), window {_window_label(job.tx_window_days)}…"
         job.updated_at = _iso_now()
 
         await _telegram_safe(
@@ -652,7 +664,7 @@ async def _run_job(job_id: str) -> None:
                             raise
                         job.upstream_retries += 1
                         job.progress = (
-                            f"Level {level + 1}/{MAX_LEVEL}: retry {attempt + 1}/{max_retries} "
+                            f"Level {level + 1}/{job.max_levels}: retry {attempt + 1}/{max_retries} "
                             f"for {wallet[:10]}…"
                         )
                         job.updated_at = _iso_now()
@@ -676,12 +688,12 @@ async def _run_job(job_id: str) -> None:
                 )
                 return
 
-            if level >= MAX_LEVEL:
+            if level >= job.max_levels:
                 break
 
             job.scanned_levels = max(job.scanned_levels, level)
             job.progress = (
-                f"Level {level + 1}/{MAX_LEVEL}: scanning {len(frontier)} wallet(s) "
+                f"Level {level + 1}/{job.max_levels}: scanning {len(frontier)} wallet(s) "
                 f"(≤{conc} parallel, {rps:.1f}/s throttle)…"
             )
             job.updated_at = _iso_now()
@@ -725,7 +737,7 @@ async def _run_job(job_id: str) -> None:
                             f"Processed: {job.processed_wallets}\n"
                             f"Upstream retries: {job.upstream_retries}\n"
                             f"Next wave size: {len(next_frontier)}\n"
-                            f"Depth: {min(MAX_LEVEL, level + 1)}/{MAX_LEVEL}",
+                            f"Depth: {min(job.max_levels, level + 1)}/{job.max_levels}",
                         )
 
                     if (
@@ -736,7 +748,7 @@ async def _run_job(job_id: str) -> None:
                         whale_hit = (wallet, total_score, level)
                         stop_all = True
 
-                    if level + 1 < MAX_LEVEL and whale_hit is None:
+                    if level + 1 < job.max_levels and whale_hit is None:
                         for nxt in neighbors[:MAX_NEIGHBORS_PER_WALLET]:
                             if len(visited) >= MAX_WALLETS_TOTAL:
                                 stop_all = True
@@ -798,7 +810,7 @@ async def _run_job(job_id: str) -> None:
             "✅ Whale scan completed\n"
             f"Whale found: {job.whale_found}\n"
             f"Processed: {job.processed_wallets}, upstream retries: {job.upstream_retries}\n"
-            f"Max depth reached: {min(MAX_LEVEL, job.scanned_levels + 1)}/{MAX_LEVEL}",
+            f"Max depth reached: {min(job.max_levels, job.scanned_levels + 1)}/{job.max_levels}",
         )
     except asyncio.CancelledError:
         job.status = "cancelled"
@@ -821,15 +833,20 @@ async def start_whale_network_job(
     *,
     tx_window_days: int | None = 30,
     telegram_chat_id: str | None = None,
+    max_levels: int | None = None,
 ) -> WhaleNetworkJob:
     job_id = uuid.uuid4().hex
     tg = (telegram_chat_id or "").strip() or None
+    resolved_levels = (
+        max(1, min(5, int(max_levels))) if max_levels is not None else _whale_network_max_levels()
+    )
     job = WhaleNetworkJob(
         job_id=job_id,
         root_address=address.strip(),
         chain=chain.strip().lower(),
         tx_window_days=tx_window_days,
         telegram_chat_id=tg,
+        max_levels=resolved_levels,
     )
     async with _JOBS_LOCK:
         _JOBS[job_id] = job

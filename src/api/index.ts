@@ -95,6 +95,9 @@ export async function startWhaleNetworkScan(
   if (options?.telegram_chat_id) {
     body.telegram_chat_id = options.telegram_chat_id;
   }
+  if (options?.max_levels !== undefined && options.max_levels !== null) {
+    body.max_levels = options.max_levels;
+  }
   const res = await axios.post<WhaleNetworkJob>(`${API_BASE}/api/v1/whale-network/start`, body);
   return res.data;
 }

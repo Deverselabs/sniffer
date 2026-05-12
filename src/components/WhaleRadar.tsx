@@ -15,6 +15,8 @@ interface WhaleRadarProps {
   onRetryLensScores: () => void;
   whaleTxWindowDays: number | null;
   onWhaleTxWindowDaysChange: (days: number | null) => void;
+  whaleMaxLevels: number;
+  onWhaleMaxLevelsChange: (levels: number) => void;
   whaleTelegramForScan: string;
   onApplyWhaleTelegram: (trimmed: string) => void;
   whaleNetworkJob: WhaleNetworkJob | null;
@@ -57,6 +59,8 @@ export function WhaleRadar({
   onRetryLensScores,
   whaleTxWindowDays,
   onWhaleTxWindowDaysChange,
+  whaleMaxLevels,
+  onWhaleMaxLevelsChange,
   whaleTelegramForScan,
   onApplyWhaleTelegram,
   whaleNetworkJob,
@@ -75,6 +79,8 @@ export function WhaleRadar({
   const selectedProfile = INDUSTRY_PROFILES[profile];
 
   const otherLensRows = (lensScores ?? []).filter((row) => row.profile !== profile);
+
+  const displayMaxLevels = whaleNetworkJob?.max_levels ?? whaleMaxLevels;
 
   const breakdown = score.tiers.map((tier) => ({
     ...tier,
@@ -195,7 +201,10 @@ export function WhaleRadar({
         <div className="ui-whale-status-head">
           <div>
             <p className="ui-whale-status-title">Whale map</p>
-            <p className="ui-whale-status-sub">Up to 4 hops from this wallet · same rules as the graph scan</p>
+            <p className="ui-whale-status-sub">
+              Up to {displayMaxLevels} graph level{displayMaxLevels === 1 ? "" : "s"} from this wallet · same rules as
+              the graph scan
+            </p>
           </div>
           {(whaleNetworkJob || whaleNetworkLoading) && (
             <span
@@ -222,7 +231,9 @@ export function WhaleRadar({
                 <span className="ui-whale-metric-label">wallets</span>
               </div>
               <div>
-                <span className="ui-whale-metric-value">{Math.min(4, whaleNetworkJob.scanned_levels + 1)}</span>
+                <span className="ui-whale-metric-value">
+                  {Math.min(displayMaxLevels, whaleNetworkJob.scanned_levels + 1)}
+                </span>
                 <span className="ui-whale-metric-label">depth</span>
               </div>
               <div>
@@ -230,11 +241,6 @@ export function WhaleRadar({
                 <span className="ui-whale-metric-label">queued</span>
               </div>
             </div>
-            {(whaleNetworkJob.upstream_retries ?? 0) > 0 && (
-              <p className="ui-whale-status-muted">
-                Slow upstream — retried {whaleNetworkJob.upstream_retries} time(s); nothing skipped.
-              </p>
-            )}
             {(whaleNetworkJob.wallet_cache_hits ?? 0) > 0 && (
               <p className="ui-whale-status-muted">
                 Reused {whaleNetworkJob.wallet_cache_hits} wallet scan(s) — same on-chain activity tip as last time.
@@ -250,7 +256,9 @@ export function WhaleRadar({
               </p>
             )}
             {whaleNetworkJob.status === "completed" && !whaleNetworkJob.whale_found && (
-              <p className="ui-whale-status-muted">No high-score wallet found within 4 hops.</p>
+              <p className="ui-whale-status-muted">
+                No high-score wallet found within {whaleNetworkJob.max_levels ?? 2} levels.
+              </p>
             )}
             {whaleNetworkLoading && (
               <button type="button" className="ui-btn ui-btn--ghost ui-whale-cancel" onClick={onCancelWhaleNetworkScan}>
@@ -262,7 +270,7 @@ export function WhaleRadar({
       </section>
 
       <details className="ui-surface ui-card ui-whale-scan-further">
-        <summary className="ui-whale-scan-further-summary">Go deeper — time range &amp; Telegram</summary>
+        <summary className="ui-whale-scan-further-summary">Go deeper — time range, search depth &amp; Telegram</summary>
         <div className="ui-whale-scan-further-body">
           <label className="ui-whale-field-label">Neighbor activity window</label>
           <select
@@ -278,6 +286,22 @@ export function WhaleRadar({
             <option value="30">Last 30 days</option>
             <option value="full">Full history</option>
           </select>
+          <label className="ui-whale-field-label ui-mt-tight">Search depth (graph levels)</label>
+          <select
+            className="ui-whale-field-control"
+            value={String(whaleMaxLevels)}
+            onChange={(e) => onWhaleMaxLevelsChange(Number(e.target.value))}
+            aria-label="Maximum BFS depth for whale map scan"
+          >
+            <option value="1">1 level (root only)</option>
+            <option value="2">2 levels (root + neighbors)</option>
+            <option value="3">3 levels</option>
+            <option value="4">4 levels</option>
+            <option value="5">5 levels</option>
+          </select>
+          <p className="ui-whale-hint">
+            Deeper scans use more API quota. Free tiers often need 1–2 levels.
+          </p>
           <label className="ui-whale-field-label ui-mt-tight">Telegram (optional)</label>
           <input
             type="text"

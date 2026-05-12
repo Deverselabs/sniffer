@@ -25,6 +25,8 @@ export interface WhaleNetworkJob {
   wallet_cache_hits?: number;
   queued_wallets: number;
   scanned_levels: number;
+  /** BFS depth cap (root = level 0). From server; default 2 on free tier. */
+  max_levels?: number;
   whale_found: boolean;
   whale_wallet: string | null;
   whale_score: number | null;
@@ -38,6 +40,8 @@ export interface WhaleNetworkJob {
 /** POST /api/v1/whale-network/start — null tx_window_days = full-history neighbors (still capped). */
 export interface WhaleNetworkStartOptions {
   tx_window_days?: number | null;
+  /** BFS depth 1–5 (root = level 0). Omit to use server default. */
+  max_levels?: number | null;
   telegram_chat_id?: string | null;
 }
 

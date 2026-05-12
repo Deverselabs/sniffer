@@ -23,6 +23,7 @@ function App() {
   const [address, setAddress] = useState("");
   const [toasts, setToasts] = useState<Array<{ id: string; text: string }>>([]);
   const [whaleTxWindowDays, setWhaleTxWindowDays] = useState<number | null>(30);
+  const [whaleMaxLevels, setWhaleMaxLevels] = useState(2);
   const [whaleTelegramForScan, setWhaleTelegramForScan] = useState("");
   const rootWallet = useWalletData();
   const senderWallet = useWalletData();
@@ -74,6 +75,7 @@ function App() {
     if (activeData) {
       setWhaleTelegramForScan("");
       setWhaleTxWindowDays(30);
+      setWhaleMaxLevels(2);
     }
   }, [activeData?.address, activeData?.chain]);
 
@@ -82,7 +84,10 @@ function App() {
       void cancelWhaleNetworkScan();
       return;
     }
-    const opts: WhaleNetworkStartOptions = { tx_window_days: whaleTxWindowDays };
+    const opts: WhaleNetworkStartOptions = {
+      tx_window_days: whaleTxWindowDays,
+      max_levels: whaleMaxLevels,
+    };
     const tg = whaleTelegramForScan.trim();
     if (tg) opts.telegram_chat_id = tg;
     void startWhaleNetworkScan(activeData.address, activeData.chain, opts);
@@ -90,6 +95,7 @@ function App() {
     activeData,
     mode,
     whaleTxWindowDays,
+    whaleMaxLevels,
     whaleTelegramForScan,
     startWhaleNetworkScan,
     cancelWhaleNetworkScan,
@@ -330,6 +336,8 @@ function App() {
                     onRetryLensScores={activeReloadLensScores}
                     whaleTxWindowDays={whaleTxWindowDays}
                     onWhaleTxWindowDaysChange={setWhaleTxWindowDays}
+                    whaleMaxLevels={whaleMaxLevels}
+                    onWhaleMaxLevelsChange={setWhaleMaxLevels}
                     whaleTelegramForScan={whaleTelegramForScan}
                     onApplyWhaleTelegram={(trimmed) => setWhaleTelegramForScan(trimmed)}
                     whaleNetworkJob={whaleNetworkJob}

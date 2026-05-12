@@ -17,11 +17,31 @@ function resolvedTxWindow(opts?: WhaleNetworkStartOptions | null): number | null
   return opts.tx_window_days;
 }
 
-function resumeStorageKey(address: string, chain: Chain, txWindowDays: number | null): string {
+function resolvedMaxLevels(opts?: WhaleNetworkStartOptions | null): number {
+  const raw = opts?.max_levels;
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return Math.max(1, Math.min(5, Math.floor(raw)));
+  }
+  return 2;
+}
+
+function resumeStorageKey(
+  address: string,
+  chain: Chain,
+  txWindowDays: number | null,
+  maxLevels: number
+): string {
   const trimmed = address.trim();
   const normalized = chain === "ethereum" ? trimmed.toLowerCase() : trimmed;
   const w = txWindowDays === null ? "full" : String(txWindowDays);
-  return `sniffer:whale_network:${chain}:${normalized}:${w}`;
+  return `sniffer:whale_network:${chain}:${normalized}:${w}:d${maxLevels}`;
+}
+
+function jobMaxLevels(job: WhaleNetworkJob): number {
+  if (typeof job.max_levels === "number" && Number.isFinite(job.max_levels)) {
+    return Math.max(1, Math.min(8, Math.floor(job.max_levels)));
+  }
+  return 2;
 }
 
 function readStoredJobId(key: string): string | null {
@@ -123,7 +143,8 @@ export function useWhaleNetworkScan() {
   const start = useCallback(
     async (address: string, chain: Chain, opts?: WhaleNetworkStartOptions | null) => {
       const txw = resolvedTxWindow(opts);
-      const key = resumeStorageKey(address, chain, txw);
+      const maxLv = resolvedMaxLevels(opts);
+      const key = resumeStorageKey(address, chain, txw, maxLv);
       clearPoll();
 
       if (activeResumeKeyRef.current !== null && activeResumeKeyRef.current !== key) {
@@ -143,7 +164,11 @@ export function useWhaleNetworkScan() {
       if (storedId) {
         try {
           const job = await fetchWhaleNetworkStatus(storedId);
-          if (jobMatchesWallet(job, address, chain) && jobTxWindowDays(job) === txw) {
+          if (
+            jobMatchesWallet(job, address, chain) &&
+            jobTxWindowDays(job) === txw &&
+            jobMaxLevels(job) === maxLv
+          ) {
             if (job.status === "cancelled") {
               clearStoredJobId(key);
             } else {
@@ -175,18 +200,16 @@ export function useWhaleNetworkScan() {
 
       setState({ job: null, loading: true, error: null });
       try {
-        const apiOpts: WhaleNetworkStartOptions = {};
+        const apiOpts: WhaleNetworkStartOptions = {
+          max_levels: resolvedMaxLevels(opts),
+        };
         if (opts?.tx_window_days !== undefined) {
           apiOpts.tx_window_days = opts.tx_window_days;
         }
         if (opts?.telegram_chat_id) {
           apiOpts.telegram_chat_id = opts.telegram_chat_id;
         }
-        const job = await startWhaleNetworkScan(
-          address,
-          chain,
-          Object.keys(apiOpts).length > 0 ? apiOpts : undefined
-        );
+        const job = await startWhaleNetworkScan(address, chain, apiOpts);
         adoptJob(job, key);
         if (!isTerminal(job.status)) {
           pollTimer.current = window.setTimeout(() => {
